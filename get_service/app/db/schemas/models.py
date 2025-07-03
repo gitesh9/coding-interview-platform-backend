@@ -9,24 +9,16 @@ class DifficultyEnum(enum.Enum):
     easy = "easy"
     medium = "medium"
     hard = "hard"
+class SubmissionState(enum.Enum):
+    successfull = "successfull"
+    failed = "failed"
     
-user_solved_problems = Table( # type: ignore
+user_solved_problems = Table(
     "user_solved_problems",
     Base.metadata,
     Column("user_id", Integer, ForeignKey("users.id"), primary_key=True),
     Column("problem_id", Integer, ForeignKey("problems.id"), primary_key=True)
 )
-
-class User(Base):
-    __tablename__ = "users"
-    id = Column(Integer, primary_key=True)
-    username = Column(String, unique=True, nullable=False)
-    user_email = Column(String, unique=True, nullable=False)
-    solved_problems = relationship(
-        "Problem",
-        secondary=user_solved_problems,
-        back_populates="solvers"
-    )
 
 class Problem(Base):
     __tablename__ = "problems"
@@ -66,7 +58,7 @@ class Discussion(Base):
     __tablename__ = "discussions"
     id = Column(Integer, primary_key=True)
     problem_id = Column(Integer, ForeignKey("problems.id"))
-    user_id = Column(Integer, ForeignKey("users.id"))
+    user_id = Column(Integer, nullable=False)
     comment = Column(Text)
     created_at = Column(DateTime, default=datetime.now)
 
@@ -77,10 +69,10 @@ class Submission(Base):
     __tablename__ = "submissions"
     id = Column(Integer, primary_key=True)
     problem_id = Column(Integer, ForeignKey("problems.id"))
-    user_id = Column(Integer, ForeignKey("users.id"))
+    user_id = Column(Integer, nullable=False)
     code = Column(Text)
     language = Column(String)
-    status = Column(String)
+    status = Column(Enum(SubmissionState),nullable=False)
     submitted_at = Column(DateTime, default=datetime.now)
 
     problem = relationship("Problem", back_populates="submissions")

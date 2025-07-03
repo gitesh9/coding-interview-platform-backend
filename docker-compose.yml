@@ -6,6 +6,7 @@ services:
     ports: 
       - "8080:8080"
     depends_on:
+      - auth_service
       - get_service
       - code_evaluations_service
       - collaboration_service
@@ -21,6 +22,10 @@ services:
       POSTGRES_DB: postgres
     volumes:
       - pgdata:/var/lib/postgresql/data
+  auth_service:
+    build: ./auth_service
+    ports:
+      - "8001:8001"
   get_service:
     build: ./get_service
     ports:
