@@ -1,0 +1,8 @@
+jwt
+fastapi
+uvicorn[standard]
+sqlalchemy
+psycopg2-binary
+passlib[bcrypt]
+PyJWT
+python-dotenv
