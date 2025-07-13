@@ -55,3 +55,5 @@ services:
       OPENAI_APIKEY: 'your-openai-api-key-here'
     volumes:
       - ./weaviate_data:/var/lib/weaviate
+volumes:
+  "pgdata":
