@@ -2,3 +2,8 @@ fastapi
 uvicorn
 sqlalchemy
 psycopg2-binary
+weaviate-client
+openai
+faiss-cpu
+numpy
+sentence-transformers
