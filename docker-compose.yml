@@ -1,5 +1,4 @@
 version: "3.8"
-
 services:
   api_gateway:
     build: ./api_gateway
@@ -23,13 +22,38 @@ services:
       - pgdata:/var/lib/postgresql/data
   get_service:
     build: ./get_service
+    depends_on:
+      - weaviate
     ports:
       - "8002:8002"
+    environment:
+      - GET_SERVICE_URL=${GET_SERVICE_URL}
+      - GET_SERVICE=${GET_SERVICE}
+    volumes:
+      - ./data/faiss:/faiss_data
+
   code_evaluations_service:
     build: ./code_evaluations_service
     ports:
       - "8003:8003"
+    environment:
+      - CODE_EVAL_SERVICE_URL=${CODE_EVAL_SERVICE_URL}
+      - CODE_EVAL_SERVICE=${CODE_EVAL_SERVICE}
+  
   collaboration_service:
     build: ./collaboration_service
     ports:
       - "8004:8004"
+  weaviate:
+    image: semitechnologies/weaviate:1.25.2
+    environment:
+      QUERY_DEFAULTS_LIMIT: 25
+      AUTHENTICATION_ANONYMOUS_ACCESS_ENABLED: 'true'
+      PERSISTENCE_DATA_PATH: './data'
+      DEFAULT_VECTORIZER_MODULE: 'text2vec-openai'
+      ENABLE_MODULES: 'text2vec-openai'
+      OPENAI_APIKEY: 'your-openai-api-key-here'
+    volumes:
+      - ./weaviate_data:/var/lib/weaviate
+volumes:
+  "pgdata":
