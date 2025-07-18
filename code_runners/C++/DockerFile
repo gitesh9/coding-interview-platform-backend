@@ -1,0 +1,13 @@
+FROM gcc:13
+
+WORKDIR /C++
+# RUN apt-get update && \
+#     apt-get install -y libjsoncpp-dev
+RUN apt-get update && \
+    apt-get install -y wget
+RUN mkdir -p /usr/local/include/nlohmann
+COPY json.hpp /usr/local/include/nlohmann/json.hpp
+COPY run.sh .
+RUN chmod +x run.sh
+
+CMD ["./run.sh"]

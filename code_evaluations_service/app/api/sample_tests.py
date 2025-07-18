@@ -1,55 +1,47 @@
-import subprocess
-import uuid
-from pathlib import Path
-from typing import Dict, Union
+from typing import Dict, List,Any
+import json
+from ..judge.judge import run_code
 
-def run_sample_code(code: str, lang:str) -> Dict[str, Union[str, Dict[str, str]]]:
-    if lang == "c":
-        return compile_c_to_wasm(code)
-    elif lang == "python":
-        return {"hint": "Use Pyodide client-side for Python WASM"}
-    else:
-        return {"error": f"Language {lang} is not yet supported"}
+def run_sample_code(raw_code: str, lang:str,raw_testcases:str, raw_input_schema:str,raw_official_solution: str, execution_template:Dict[str,str]):
+    code = raw_code.encode('utf-8').decode('unicode_escape')
+    
+    input_schema = json.loads(raw_input_schema)
+    # execution_template = json.loads(raw_execution_template)
+    
+    testcases2 = parse_input(raw_testcases,input_schema)
+    
+    print(execution_template["input_parser"])
+    
+    input_parser = execution_template['input_parser']
+    function_call = execution_template['function_call']
+    
+    return run_code(code,json.dumps(testcases2),input_parser,function_call,lang) # type: ignore
+    return [{"error": error, "runtime":runtime,"status":"Accepted","stdout":output,"results":results}]
 
-def compile_c_to_wasm(code: str) -> Dict[str, Union[str, Dict[str, str]]]:
-    temp_dir = Path(f"/tmp/eval/{uuid.uuid4()}")
-    temp_dir.mkdir(parents=True, exist_ok=True)
+def parse_input(raw_input: str, schema: Dict[str,Any])->List[Dict[str,Any]]:
+    lines = raw_input.strip().splitlines()
+    args = schema["args"]
+    step = len(args)
 
-    source_path = temp_dir / "main.c"
-    output_js = temp_dir / "output.js"
-    output_wasm = temp_dir / "output.wasm"
-    source_path.write_text(code)
+    testcases: List[Dict[str,Any]] = []
+    for i in range(0, len(lines), step):
+        testcase:Dict[str,Any] = {}
+        for j, arg in enumerate(args):
+            raw_value = lines[i + j]
+            arg_type = arg["type"]
+            arg_name = arg["name"]
 
-    try:
-        result = subprocess.run(
-            [
-                "docker", "run", "--rm", "-i",
-                "--network", "none",
-                "-v", f"{temp_dir}:/src",
-                "emscripten/emsdk",
-                "emcc", "/src/main.c",
-                "-o", "/src/output.js",
-                "-s", "EXPORTED_RUNTIME_METHODS=['cwrap','ccall']",
-                "-s", "MODULARIZE=1",
-                "-s", "ENVIRONMENT=web"
-            ],
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
-            timeout=15
-        )
-
-        if result.returncode != 0:
-            return {"error": result.stderr.decode()}
-
-        return {
-            "js": output_js.read_text(),
-            "wasm_base64": output_wasm.read_bytes().hex()
-        }
-
-    except subprocess.TimeoutExpired:
-        return {"error": "Compilation timed out"}
-
-    finally:
-        for f in temp_dir.glob("*"):
-            f.unlink()
-        temp_dir.rmdir()
+            if arg_type == "str":
+                # Parse quoted strings safely
+                value = json.loads(raw_value)
+            elif arg_type == "int":
+                value = int(raw_value)
+            elif arg_type == "float":
+                value = float(raw_value)
+            else:
+                raise ValueError(f"Unsupported type: {arg_type}")
+            
+            testcase[arg_name] = value
+        testcases.append(testcase)
+    print(testcases,schema,raw_input)
+    return testcases

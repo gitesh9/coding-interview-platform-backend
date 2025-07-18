@@ -4,6 +4,7 @@ from .routes import all_routes
 from .db.session import Base, engine, SessionLocal
 from .db.models.models import Problem
 from .routes.problem.similar_problems import vector_store
+
 app = FastAPI()
 openai.api_key = "your-openai-api-key"
 for sub_routes in all_routes:
@@ -23,3 +24,6 @@ def startup_event():
     
     vector_store.save()
     print("Vector index initialized with problems.")
+import threading
+from .grpc_server import serve
+threading.Thread(target=serve, daemon=True).start()

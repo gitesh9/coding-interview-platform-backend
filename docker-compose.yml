@@ -20,25 +20,20 @@ services:
       POSTGRES_DB: postgres
     volumes:
       - pgdata:/var/lib/postgresql/data
+
   get_service:
     build: ./get_service
     depends_on:
       - weaviate
     ports:
       - "8002:8002"
+      - "50051:50051"
     environment:
       - GET_SERVICE_URL=${GET_SERVICE_URL}
       - GET_SERVICE=${GET_SERVICE}
     volumes:
       - ./data/faiss:/faiss_data
 
-  code_evaluations_service:
-    build: ./code_evaluations_service
-    ports:
-      - "8003:8003"
-    environment:
-      - CODE_EVAL_SERVICE_URL=${CODE_EVAL_SERVICE_URL}
-      - CODE_EVAL_SERVICE=${CODE_EVAL_SERVICE}
   
   collaboration_service:
     build: ./collaboration_service
@@ -55,5 +50,68 @@ services:
       OPENAI_APIKEY: 'your-openai-api-key-here'
     volumes:
       - ./weaviate_data:/var/lib/weaviate
+  code_evaluations_service:
+    build: ./code_evaluations_service
+    depends_on:
+      - get_service
+    ports:
+      - "8003:8003"
+    environment:
+      - CODE_EVAL_SERVICE_URL=${CODE_EVAL_SERVICE_URL}
+      - CODE_EVAL_SERVICE=${CODE_EVAL_SERVICE}
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - shared_sandbox:/sandboxes
+
+  python_runner:
+    container_name: python_runner
+    build: ./code_runners/python
+    image: python-runner
+    command: ["sleep", "infinity"]
+    volumes:
+      - shared_sandbox:/sandboxes
+  c_runner:
+    build: ./code_runners/C
+    container_name: c_runner
+    command: ["sleep", "infinity"]
+    volumes:
+      - shared_sandbox:/sandboxes
+
+  cpp_runner:
+    build: ./code_runners/C++
+    container_name: cpp_runner
+    command: ["sleep", "infinity"]
+    volumes:
+      - shared_sandbox:/sandboxes
+
+  java_runner:
+    build: ./code_runners/Java
+    container_name: java_runner
+    command: ["sleep", "infinity"]
+    volumes:
+      - shared_sandbox:/sandboxes
+
+  rust_runner:
+    build: ./code_runners/Rust
+    container_name: rust_runner
+    command: ["sleep", "infinity"]
+    volumes:
+      - shared_sandbox:/sandboxes
+
+  go_runner:
+    build: ./code_runners/Go
+    container_name: go_runner
+    command: ["sleep", "infinity"]
+    volumes:
+      - shared_sandbox:/sandboxes
+  
+  javascript_runner:
+    build: ./code_runners/javascript
+    container_name: javascript_runner
+    command: ["sleep", "infinity"]
+    volumes:
+      - shared_sandbox:/sandboxes
+
 volumes:
-  "pgdata":
+  pgdata:
+  shared_sandbox:
