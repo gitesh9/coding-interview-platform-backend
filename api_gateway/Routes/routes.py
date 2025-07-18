@@ -42,14 +42,40 @@ async def proxy_get(path:str, request: Request):
 
     return JSONResponse(status_code=response.status_code, content=content)
 
+@router.api_route("/problems/{problemId}/run",methods=["POST"])
+async def proxy_run(problemId: str, request: Request):
+    body = await request.body()
+    async with httpx.AsyncClient() as client:
+        try:
+            response = await client.request(
+                method=request.method,
+                url=f"{CODE_EVALUATION_SERVICE}/{problemId}/sample",
+                headers={k: v for k, v in request.headers.items() if k.lower() != "host"},
+                content=body
+            )
+        except httpx.RequestError as e:
+             return JSONResponse(
+                status_code=502,
+                content={"error": "Gateway request failed", "detail": str(e)}
+            )
+    print("shalalala: ",response)
+    try:
+        content = response.json()
+    except Exception:
+        content = {"error": "Non-JSON response", "raw": response.text}
+
+    return JSONResponse(status_code=response.status_code, content=content)
+
 @router.api_route("/problems/{problemId}/submit",methods=["POST"])
 async def proxy_submit(problemId: str, request: Request):
+    body = await request.body()
     async with httpx.AsyncClient() as client:
         try:
             response = await client.request(
                 method=request.method,
                 url=f"{CODE_EVALUATION_SERVICE}/{problemId}/evaluate",
-                headers={k: v for k, v in request.headers.items() if k.lower() != "host"}
+                headers={k: v for k, v in request.headers.items() if k.lower() != "host"},
+                content=body
             )
         except httpx.RequestError as e:
              return JSONResponse(

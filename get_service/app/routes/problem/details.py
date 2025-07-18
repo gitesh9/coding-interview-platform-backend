@@ -26,12 +26,13 @@ def get_problem_details(value:str,db: Session = Depends(get_db)) -> Union[JSONRe
         problem_data: ProblemResponseSchema = query.filter(Problem.id == value).first()
     else:
         problem_data: ProblemResponseSchema = query.filter(Problem.slug.ilike(value)).first()
+    
     if not problem_data:
         return JSONResponse(
             status_code=404,
             content={"error": 404, "message": "Problem not found"}
         )
-        
+
     filtered_similar_problems = find_similar_problems(problem_data, db)
     
     print("HELLOOOO: ",filtered_similar_problems)

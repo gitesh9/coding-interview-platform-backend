@@ -1,4 +1,5 @@
-from sqlalchemy import Column, Integer, String, Text, Enum, Boolean, ForeignKey, DateTime
+from sqlalchemy import Column, Integer, String, Text, Enum, ForeignKey, DateTime
+from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import relationship
 from ...db.session import Base
 import enum
@@ -18,18 +19,16 @@ class UserProblemStatusEnum(enum.Enum):
     attempted = "attempted"
     not_attempted = "not_attempted"
 
-
 class SampleTestcases(Base):
     __tablename__ = "sample_testcases"
-    id = Column(Integer, primary_key=True)
-    problem_id = Column(Integer, ForeignKey("problems.id"))
+    id = Column(Integer, primary_key=True,autoincrement=True)
+    problem_id = Column(Integer, ForeignKey("problems.id"),index=True)
     input_data = Column(Text)
     expected_output = Column(Text)
-    is_sample = Column(Boolean, default=True)
     explanation = Column(Text, nullable=True)
 
     problem = relationship("Problem", back_populates="sample_testcases")
-
+    
 class Hint(Base):
     __tablename__ = "hints"
     id = Column(Integer, primary_key=True)
@@ -81,6 +80,18 @@ class Problem(Base):
     difficulty = Column(Enum(DifficultyEnum), nullable=False, index=True)
     tags = Column(Text, nullable=True, index=True)
     constraints = Column(Text, nullable=True)
+    input_schema = Column(JSONB,nullable=False)
+#     "input_schema": [
+#     {"name": "nums", "type": "List[int]"},
+#     {"name": "target", "type": "int"}
+#   ],
+    code_templates = Column(JSONB,nullable=False)
+#     "code_templates": {
+#     "python": "class Solution:\n    def LIS(self, nums):\n        pass",
+#     "cpp": "class Solution {\npublic:\n    int LIS(vector<int>& nums) {\n        // code\n    }\n};"
+#   }
+    official_solution = Column(Text, nullable=False)
+    execution_template = Column(JSONB, nullable=False)
 
     hints = relationship("Hint", back_populates="problem", cascade="all, delete-orphan")
     sample_testcases = relationship("SampleTestcases", back_populates="problem", cascade="all, delete-orphan")
