@@ -1,6 +1,6 @@
 # Coding Interview Platform — Backend
 
-A microservices-based backend for a coding interview platform supporting multi-language code execution, semantic problem search, and real-time collaboration. Built with **FastAPI**, **gRPC**, **Docker**, and **PostgreSQL**.
+A microservices-based backend for a coding interview platform supporting multi-language code execution, AI-powered interviews, semantic problem search, and real-time collaboration. Built with **FastAPI**, **gRPC**, **Docker**, and **PostgreSQL**.
 
 ---
 
@@ -10,30 +10,34 @@ A microservices-based backend for a coding interview platform supporting multi-l
 ┌────────────┐
 │   Client   │
 └─────┬──────┘
-      │ HTTP
+      │ HTTP / WebSocket
 ┌─────▼──────────┐
-│  API Gateway   │ :8080
-└──┬──┬──┬──┬────┘
-   │  │  │  │
-   │  │  │  └──► Collaboration Service  :8004
-   │  │  └─────► Code Evaluations Svc   :8003  ──► Language Runners (Docker)
-   │  └────────► Get Service            :8002  ──► Weaviate / FAISS
-   └───────────► Auth Service           :8001
-                        │
-                  ┌─────▼─────┐
-                  │ PostgreSQL│ :5432
-                  └───────────┘
+│  API Gateway   │ :8000
+└──┬──┬──┬──┬──┬──┬──┘
+   │  │  │  │  │  │
+   │  │  │  │  │  └──► AI Service              :8006  ──► OpenAI API
+   │  │  │  │  └─────► Interview Service        :8005
+   │  │  │  └────────► Collaboration Service    :8004  (WebSocket)
+   │  │  └───────────► Code Evaluations Svc     :8003  ──► Language Runners (Docker)
+   │  └──────────────► Get Service              :8002  ──► Weaviate / FAISS
+   └─────────────────► Auth Service             :8001
+                            │
+                      ┌─────▼─────┐
+                      │ PostgreSQL│ :5432
+                      └───────────┘
 ```
 
 ### Services
 
 | Service | Port | Purpose |
 |---|---|---|
-| **API Gateway** | 8080 | Central HTTP reverse proxy routing requests to microservices |
+| **API Gateway** | 8000 | Central HTTP/WebSocket reverse proxy routing requests to microservices |
 | **Auth Service** | 8001 | User registration, login, JWT authentication |
 | **Get Service** | 8002 (HTTP), 50051 (gRPC) | Problem retrieval, semantic search, similar problem recommendations |
 | **Code Evaluations Service** | 8003 | Code execution, test validation, multi-language judging |
-| **Collaboration Service** | 8004 | Real-time collaborative coding sessions |
+| **Collaboration Service** | 8004 | Real-time collaborative coding sessions (WebSocket) |
+| **Interview Service** | 8005 | Interview session CRUD, join codes, candidate/interviewer management |
+| **AI Service** | 8006 | AI-powered interview questions, follow-ups, and code hints (OpenAI) |
 
 ---
 
@@ -43,7 +47,9 @@ A microservices-based backend for a coding interview platform supporting multi-l
 - **Framework:** FastAPI + Uvicorn
 - **Database:** PostgreSQL 15 (SQLAlchemy ORM)
 - **Inter-service Communication:** gRPC (protobuf), HTTP (httpx)
+- **AI / LLM:** OpenAI API (gpt-4o-mini) for interview questions and code hints
 - **Vector Search:** FAISS (sentence-transformers `all-MiniLM-L6-v2`), Weaviate (OpenAI embeddings)
+- **Real-time:** WebSocket (FastAPI + websockets)
 - **Containerization:** Docker + Docker Compose
 - **Code Sandboxing:** Isolated Docker containers per language with shared volumes
 
@@ -54,7 +60,7 @@ A microservices-based backend for a coding interview platform supporting multi-l
 ### Prerequisites
 
 - [Docker](https://docs.docker.com/get-docker/) & Docker Compose
-- OpenAI API key (for Weaviate semantic search)
+- OpenAI API key (for AI interview features and Weaviate semantic search)
 
 ### Setup
 
@@ -66,16 +72,14 @@ A microservices-based backend for a coding interview platform supporting multi-l
 
 2. **Configure environment variables**
 
-   Set the following in your environment or a `.env` file:
+   Create a `.env` file in the project root:
 
-   | Variable | Description | Default |
-   |---|---|---|
-   | `GET_SERVICE_URL` | PostgreSQL connection string for get_service | — |
-   | `GET_SERVICE` | Get service base URL | `http://get_service:8002` |
-   | `CODE_EVAL_SERVICE_URL` | PostgreSQL connection string for code_evaluations_service | — |
-   | `CODE_EVAL_SERVICE` | Code evaluations service base URL | `http://code_evaluations_service:8003` |
-   | `DATABASE_URL` | PostgreSQL connection string for auth_service | `postgresql://postgres:postgres@db:5432/postgres` |
-   | `OPENAI_APIKEY` | OpenAI API key (Weaviate embeddings) | — |
+   ```env
+   OPENAI_API_KEY=sk-your-openai-api-key
+   OPENAI_MODEL=gpt-4o-mini
+   ```
+
+   All database URLs and inter-service URLs are pre-configured in `docker-compose.yml`.
 
 3. **Start all services**
    ```bash
@@ -97,37 +101,67 @@ A microservices-based backend for a coding interview platform supporting multi-l
 
 ## API Endpoints
 
-### API Gateway (`:8080`)
+### API Gateway (`:8000`)
 
 | Method | Endpoint | Description | Proxies To |
 |---|---|---|---|
-| `GET` | `/api/get/{path}` | Fetch problem data | Get Service |
-| `POST` | `/api/problems/{problemId}/run` | Run code against sample tests | Code Evaluations Service |
-| `POST` | `/api/problems/{problemId}/submit` | Submit code for evaluation | Code Evaluations Service |
-| `POST` | `/api/collab/` | Create collaboration session | Collaboration Service |
+| `POST` | `/auth/login` | Authenticate user | Auth Service |
+| `POST` | `/auth/register` | Register new user | Auth Service |
+| `GET` | `/get/problems-set/` | List all problems | Get Service |
+| `GET` | `/get/problems?value={query}` | Semantic search | Get Service |
+| `GET` | `/get/problems/{id}` | Problem details | Get Service |
+| `POST` | `/problems/{id}/run` | Run code against sample tests | Code Evaluations Service |
+| `POST` | `/problems/{id}/submit` | Submit code for evaluation | Code Evaluations Service |
+| `GET` | `/interviews/sessions` | List interviewer's sessions | Interview Service |
+| `POST` | `/interviews/sessions` | Create interview session | Interview Service |
+| `POST` | `/interviews/sessions/join` | Join session by code | Interview Service |
+| `PATCH` | `/interviews/sessions/{id}/end` | End interview session | Interview Service |
+| `GET` | `/interviews/sessions/{id}` | Get session details | Interview Service |
+| `POST` | `/collab/` | Create collaboration session | Collaboration Service |
+| `WS` | `/collab/{sessionId}?userId=` | Real-time code sync | Collaboration Service |
+| `POST` | `/ai/interview/question` | Get AI interview question | AI Service |
+| `POST` | `/ai/interview/respond` | AI follow-up to answer | AI Service |
+| `POST` | `/ai/hint` | Get AI code hint | AI Service |
 
 ### Auth Service (`:8001`)
 
+| Method | Endpoint | Body | Response |
+|---|---|---|---|
+| `POST` | `/login` | `{ email, password }` | `{ token, user: { id, name, email, role, avatarUrl } }` |
+| `POST` | `/register` | `{ name, email, password, role }` | Same as login |
+
+### Interview Service (`:8005`)
+
+| Method | Endpoint | Auth | Description |
+|---|---|---|---|
+| `GET` | `/sessions` | Required | List sessions for current interviewer |
+| `POST` | `/sessions` | Required | Create session with `{ problemIds, timeLimit }` |
+| `POST` | `/sessions/join` | Required | Join with `{ joinCode }`, sets status to active |
+| `GET` | `/sessions/{id}` | — | Get session details |
+| `PATCH` | `/sessions/{id}/end` | Required | End session (interviewer only) |
+
+### AI Service (`:8006`)
+
 | Method | Endpoint | Body | Description |
 |---|---|---|---|
-| `POST` | `/login` | `{ username, password }` | Authenticate user, returns JWT |
-| `POST` | `/register` | `{ username, user_email, password }` | Register new user |
+| `POST` | `/interview/question` | `{ problemContext, conversationHistory[] }` | Generate opening interview question |
+| `POST` | `/interview/respond` | `{ userAnswer, problemContext, conversationHistory[] }` | Generate follow-up response |
+| `POST` | `/hint` | `{ code, problemDescription, language }` | Generate targeted code hint |
 
 ### Get Service (`:8002`)
 
 | Method | Endpoint | Description |
 |---|---|---|
-| `GET` | `/problems-set/` | List all problems |
+| `GET` | `/problems-set/` | List all problems with isSolved status |
 | `GET` | `/problems?value={query}` | Semantic search for problems (Weaviate + OpenAI) |
-| `GET` | `/problems/{id\|slug}` | Get problem details + similar problems (FAISS) |
-| `GET` | `/user/{id}` | Get user details |
+| `GET` | `/problems/{id\|slug}` | Get problem details (examples, constraints, starterCode, testCases) |
 
 ### Code Evaluations Service (`:8003`)
 
 | Method | Endpoint | Body | Description |
 |---|---|---|---|
-| `POST` | `/{problemId}/sample` | `{ code, input, language }` | Run sample test cases |
-| `POST` | `/{problemId}/evaluate` | `{ code, input, input_parsing, function_call, language }` | Full code submission |
+| `POST` | `/{problemId}/sample` | `{ code, language }` | Run sample test cases |
+| `POST` | `/{problemId}/evaluate` | `{ code, language }` | Full submission (persists result) |
 
 ---
 
@@ -159,13 +193,14 @@ Each runner is an always-on Docker container with a shared sandbox volume. Code 
 
 | Table | Key Columns |
 |---|---|
-| `users` | id, username, user_email, hashed_password |
+| `users` | id, name, email, hashed_password, role (interviewer/candidate) |
 | `problems` | id, slug, title, description, difficulty, tags, constraints, input_schema (JSONB), code_templates (JSONB), official_solution, execution_template (JSONB) |
 | `sample_testcases` | id, problem_id, input_data, expected_output, explanation |
 | `hints` | id, problem_id, text |
 | `discussions` | id, problem_id, user_id, comment, created_at |
 | `user_problem_status` | id, user_id, problem_id, status (solved/attempted/not_attempted) |
-| `submissions` | id, problem_id, user_id, code, language, status (Accepted/Wrong), submitted_at |
+| `submissions` | id, problem_id, user_id, code, language, status, runtime, test_cases_passed, total_test_cases, submitted_at |
+| `interview_sessions` | id, interviewer_id, candidate_id, candidate_name, problem_ids, problem_titles, time_limit, status (waiting/active/completed), join_code, created_at |
 
 ---
 
@@ -190,11 +225,13 @@ python -m grpc_tools.protoc -I=./proto --python_out=. --grpc_python_out=. proto/
 ## Project Structure
 
 ```
-├── api_gateway/             # HTTP reverse proxy (FastAPI)
-├── auth_service/            # Authentication & user management
+├── api_gateway/             # HTTP/WebSocket reverse proxy (FastAPI)
+├── auth_service/            # Authentication & user management (JWT, bcrypt)
 ├── get_service/             # Problem retrieval, search, gRPC server
 ├── code_evaluations_service/# Code execution & judging engine
-├── collaboration_service/   # Real-time collaboration (stub)
+├── collaboration_service/   # Real-time collaboration (WebSocket)
+├── interview_service/       # Interview session management (CRUD, join codes)
+├── ai_results_service/      # AI-powered interviews & hints (OpenAI)
 ├── code_runners/            # Dockerized language execution environments
 │   ├── C/
 │   ├── C++/
@@ -229,7 +266,7 @@ Client → API Gateway → Code Evaluations Service
 Client → API Gateway → Get Service
     → PostgreSQL (problem details, hints, sample tests)
     → FAISS index (similar problem IDs)
-    → Return problem + similar problems
+    → Return problem details (examples, constraints, starterCode, testCases)
 ```
 
 ### Semantic Search
@@ -237,5 +274,15 @@ Client → API Gateway → Get Service
 ```
 Client → API Gateway → Get Service
     → Weaviate (OpenAI text2vec embeddings)
-    → Return top 5 matching problems
+    → Return top matching problems
+```
+
+### Live Interview Flow
+
+```
+Interviewer creates session → POST /interviews/sessions → returns joinCode
+Candidate joins → POST /interviews/sessions/join → status becomes "active"
+Candidate opens problem → connects WebSocket at /collab/{sessionId}
+Interviewer observes → connects same WebSocket → receives real-time code updates
+AI interview mode → POST /ai/interview/question → LLM generates questions
 ```

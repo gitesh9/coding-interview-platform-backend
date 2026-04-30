@@ -10,6 +10,7 @@ services:
       - code_evaluations_service
       - collaboration_service
       - interview_service
+      - ai_results_service
     environment:
       - DATABASE_URL=postgresql://postgres:postgres@db:5432/postgres
       - AUTH_SERVICE=http://auth_service:8001
@@ -17,6 +18,7 @@ services:
       - CODE_EVALUATIONS_SERVICE=http://code_evaluations_service:8003
       - COLLABORATION_SERVICE=http://collaboration_service:8004
       - INTERVIEW_SERVICE=http://interview_service:8005
+      - AI_SERVICE=http://ai_results_service:8006
 
   db:
     image: postgres:15
@@ -41,12 +43,13 @@ services:
   get_service:
     build: ./get_service
     depends_on:
+      - db
       - weaviate
     ports:
       - "8002:8002"
       - "50051:50051"
     environment:
-      - GET_SERVICE_URL=${GET_SERVICE_URL}
+      - GET_SERVICE_URL=postgresql://postgres:postgres@db:5432/postgres
       - GET_SERVICE=${GET_SERVICE}
       - DATABASE_URL=postgresql://postgres:postgres@db:5432/postgres
       - JWT_SECRET_KEY=super-secret-key-change-in-production
@@ -62,6 +65,14 @@ services:
     environment:
       - DATABASE_URL=postgresql://postgres:postgres@db:5432/postgres
       - JWT_SECRET_KEY=super-secret-key-change-in-production
+
+  ai_results_service:
+    build: ./ai_results_service
+    ports:
+      - "8006:8006"
+    environment:
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - OPENAI_MODEL=${OPENAI_MODEL:-gpt-4o-mini}
 
   collaboration_service:
     build: ./collaboration_service
@@ -81,11 +92,12 @@ services:
   code_evaluations_service:
     build: ./code_evaluations_service
     depends_on:
+      - db
       - get_service
     ports:
       - "8003:8003"
     environment:
-      - CODE_EVAL_SERVICE_URL=${CODE_EVAL_SERVICE_URL}
+      - CODE_EVAL_SERVICE_URL=postgresql://postgres:postgres@db:5432/postgres
       - CODE_EVAL_SERVICE=${CODE_EVAL_SERVICE}
       - JWT_SECRET_KEY=super-secret-key-change-in-production
     volumes:

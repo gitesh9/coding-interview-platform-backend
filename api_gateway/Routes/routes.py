@@ -7,6 +7,7 @@ GET_SERVICE = os.getenv("GET_SERVICE", "http://get_service:8002")
 CODE_EVALUATION_SERVICE = os.getenv("CODE_EVALUATIONS_SERVICE", "http://code_evaluations_service:8003")
 COLLABORATION_SERVICE = os.getenv("COLLABORATION_SERVICE", "http://collaboration_service:8004")
 INTERVIEW_SERVICE = os.getenv("INTERVIEW_SERVICE", "http://interview_service:8005")
+AI_SERVICE = os.getenv("AI_SERVICE", "http://ai_results_service:8006")
 
 router = APIRouter()
 
@@ -242,8 +243,63 @@ async def proxy_collab_ws(websocket: WebSocket, sessionId: str):
         await websocket.close()
 
 
+# ─── AI service proxy ────────────────────────────────────────────────────────
+
+@router.post("/ai/interview/question")
+async def proxy_ai_interview_question(request: Request):
+    body = await request.body()
+    async with httpx.AsyncClient(timeout=60.0) as client:
+        try:
+            response = await client.post(
+                f"{AI_SERVICE}/interview/question",
+                content=body,
+                headers={"content-type": "application/json"},
+            )
+        except httpx.RequestError as e:
+            return JSONResponse(status_code=502, content={"error": "AI service unavailable", "detail": str(e)})
+    try:
+        content = response.json()
+    except Exception:
+        content = {"error": "Non-JSON response", "raw": response.text}
+    return JSONResponse(status_code=response.status_code, content=content)
 
 
+@router.post("/ai/interview/respond")
+async def proxy_ai_interview_respond(request: Request):
+    body = await request.body()
+    async with httpx.AsyncClient(timeout=60.0) as client:
+        try:
+            response = await client.post(
+                f"{AI_SERVICE}/interview/respond",
+                content=body,
+                headers={"content-type": "application/json"},
+            )
+        except httpx.RequestError as e:
+            return JSONResponse(status_code=502, content={"error": "AI service unavailable", "detail": str(e)})
+    try:
+        content = response.json()
+    except Exception:
+        content = {"error": "Non-JSON response", "raw": response.text}
+    return JSONResponse(status_code=response.status_code, content=content)
+
+
+@router.post("/ai/hint")
+async def proxy_ai_hint(request: Request):
+    body = await request.body()
+    async with httpx.AsyncClient(timeout=60.0) as client:
+        try:
+            response = await client.post(
+                f"{AI_SERVICE}/hint",
+                content=body,
+                headers={"content-type": "application/json"},
+            )
+        except httpx.RequestError as e:
+            return JSONResponse(status_code=502, content={"error": "AI service unavailable", "detail": str(e)})
+    try:
+        content = response.json()
+    except Exception:
+        content = {"error": "Non-JSON response", "raw": response.text}
+    return JSONResponse(status_code=response.status_code, content=content)
 
 
 

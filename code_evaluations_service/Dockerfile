@@ -14,9 +14,10 @@ COPY . .
 
 EXPOSE 8003
 
-RUN pip install fastapi uvicorn
 RUN pip install grpcio grpcio-tools
 
 ENV PYTHONPATH=/app
+
+CMD ["uvicorn", "app.app:app", "--host", "0.0.0.0", "--port", "8003"]
 
 CMD ["uvicorn", "app.app:app", "--host", "0.0.0.0", "--port", "8003"]
