@@ -1,13 +1,42 @@
-from fastapi import APIRouter, Query
+from fastapi import APIRouter, Query, Header
 from fastapi import Depends
 from sqlalchemy.orm import Session
 from ...db.session import SessionLocal
-from ...db.models.models import Problem
-from ...db.schemas.schemas import ProblemResponseSchema
-from typing import List
+from ...db.models.models import Problem, UserProblemStatus, UserProblemStatusEnum
+from ...db.schemas.schemas import ProblemListItemSchema
+from typing import List, Optional, Set
+import os
+import jwt
 import weaviate
 from weaviate.classes.query import MetadataQuery
 from weaviate.classes.config import Property, Configure, DataType, Integrations
+
+JWT_SECRET = os.getenv("JWT_SECRET_KEY", "super-secret-key-change-in-production")
+JWT_ALGORITHM = "HS256"
+
+
+def _get_user_id(authorization: str) -> Optional[int]:
+    if not authorization or not authorization.startswith("Bearer "):
+        return None
+    try:
+        payload = jwt.decode(authorization[7:], JWT_SECRET, algorithms=[JWT_ALGORITHM])
+        sub = payload.get("sub")
+        return int(sub) if sub is not None else None
+    except Exception:
+        return None
+
+
+def _get_solved_problem_ids(db: Session, user_id: int) -> Set[int]:
+    rows = (
+        db.query(UserProblemStatus.problem_id)
+        .filter(
+            UserProblemStatus.user_id == user_id,
+            UserProblemStatus.status == UserProblemStatusEnum.solved,
+        )
+        .all()
+    )
+    return {r[0] for r in rows}
+
 
 def get_db():
     db = SessionLocal()
@@ -18,17 +47,34 @@ def get_db():
 
 router: APIRouter = APIRouter()
 
-@router.get('/problems-set/',response_model=List[ProblemResponseSchema])
-def get_all_problems(db: Session = Depends(get_db)):
-    return fetch_all_problems(db)
+def _to_list_item(p: Problem, solved_ids: Set[int]) -> dict:
+    difficulty = p.difficulty.value if hasattr(p.difficulty, 'value') else str(p.difficulty)
+    return {
+        "id": p.id,
+        "slug": p.slug,
+        "title": p.title,
+        "difficulty": difficulty.capitalize(),
+        "tags": p.tags,
+        "constraints": p.constraints,
+        "description": p.description,
+        "isSolved": p.id in solved_ids,
+    }
 
-def fetch_all_problems(db: Session):
-    return db.query(Problem).all()
+@router.get('/problems-set/')
+def get_all_problems(
+    db: Session = Depends(get_db),
+    authorization: str = Header(default=""),
+):
+    user_id = _get_user_id(authorization)
+    solved_ids = _get_solved_problem_ids(db, user_id) if user_id else set()
+    problems = db.query(Problem).all()
+    return [_to_list_item(p, solved_ids) for p in problems]
 
 
-@router.get('/problems', response_model=List[ProblemResponseSchema])
+@router.get('/problems')
 def get_search_query(
     value: str = Query(..., description="Search query string"),
+    db: Session = Depends(get_db),
 ):
 
     # ✅ Initialize Weaviate v4 client
@@ -69,24 +115,20 @@ def get_search_query(
         ]
     )
 
-    # ✅ Convert Weaviate results to your schema
-    problems:List[ProblemResponseSchema] = []
+    # ✅ Convert Weaviate results to ProblemListItem format
+    problems = []
     for obj in results.objects:
         props = obj.properties
-        problem = ProblemResponseSchema(
-            id=0,  # Replace if ID is stored
-            slug="",  # Replace if available
-            title=str(props.get("title", "")),
-            description=str(props.get("description", "")),
-            difficulty=str(props.get("difficulty", "")),
-            tags=str(props.get("tags", "")),
-            constraints=str(props.get("constraints", "")),
-            hints=[],
-            sample_testcases=[],
-            dicussions=[],
-            submissions=[],
-            user_statuses=[]
-        )
-        problems.append(problem)
+        difficulty = str(props.get("difficulty", "")).capitalize()
+        problems.append({
+            "id": 0,
+            "slug": "",
+            "title": str(props.get("title", "")),
+            "difficulty": difficulty,
+            "tags": str(props.get("tags", "")),
+            "constraints": str(props.get("constraints", "")),
+            "description": str(props.get("description", "")),
+            "isSolved": None,
+        })
 
     return problems

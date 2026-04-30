@@ -3,14 +3,21 @@ services:
   api_gateway:
     build: ./api_gateway
     ports: 
-      - "8080:8080"
+      - "8000:8000"
     depends_on:
+      - auth_service
       - get_service
       - code_evaluations_service
       - collaboration_service
+      - interview_service
     environment:
       - DATABASE_URL=postgresql://postgres:postgres@db:5432/postgres
-      
+      - AUTH_SERVICE=http://auth_service:8001
+      - GET_SERVICE=http://get_service:8002
+      - CODE_EVALUATIONS_SERVICE=http://code_evaluations_service:8003
+      - COLLABORATION_SERVICE=http://collaboration_service:8004
+      - INTERVIEW_SERVICE=http://interview_service:8005
+
   db:
     image: postgres:15
     restart: always
@@ -20,6 +27,16 @@ services:
       POSTGRES_DB: postgres
     volumes:
       - pgdata:/var/lib/postgresql/data
+
+  auth_service:
+    build: ./auth_service
+    depends_on:
+      - db
+    ports:
+      - "8001:8001"
+    environment:
+      - DATABASE_URL=postgresql://postgres:postgres@db:5432/postgres
+      - JWT_SECRET_KEY=super-secret-key-change-in-production
 
   get_service:
     build: ./get_service
@@ -31,10 +48,21 @@ services:
     environment:
       - GET_SERVICE_URL=${GET_SERVICE_URL}
       - GET_SERVICE=${GET_SERVICE}
+      - DATABASE_URL=postgresql://postgres:postgres@db:5432/postgres
+      - JWT_SECRET_KEY=super-secret-key-change-in-production
     volumes:
       - ./data/faiss:/faiss_data
 
-  
+  interview_service:
+    build: ./interview_service
+    depends_on:
+      - db
+    ports:
+      - "8005:8005"
+    environment:
+      - DATABASE_URL=postgresql://postgres:postgres@db:5432/postgres
+      - JWT_SECRET_KEY=super-secret-key-change-in-production
+
   collaboration_service:
     build: ./collaboration_service
     ports:
@@ -59,6 +87,7 @@ services:
     environment:
       - CODE_EVAL_SERVICE_URL=${CODE_EVAL_SERVICE_URL}
       - CODE_EVAL_SERVICE=${CODE_EVAL_SERVICE}
+      - JWT_SECRET_KEY=super-secret-key-change-in-production
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
       - shared_sandbox:/sandboxes

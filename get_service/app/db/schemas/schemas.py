@@ -1,5 +1,5 @@
 from datetime import datetime
-from typing import List, Optional
+from typing import List, Optional, Dict, Any
 from pydantic import BaseModel
 import enum
 
@@ -85,3 +85,47 @@ class SimilarProblemResponseSchema(BaseModel):
     difficulty: str
     class Config:
         orm_mode = True
+
+
+# ─── Frontend-compatible schemas ─────────────────────────────────────────────
+
+class ExampleSchema(BaseModel):
+    input: str
+    output: str
+    explanation: Optional[str] = None
+
+class TestCaseSchema(BaseModel):
+    id: int
+    input: str
+    expectedOutput: str
+
+class ProblemListItemSchema(BaseModel):
+    """Matches frontend ProblemListItem interface."""
+    id: int
+    slug: str
+    title: str
+    difficulty: str
+    tags: Optional[str] = None
+    constraints: Optional[str] = None
+    description: str
+    isSolved: Optional[bool] = None
+
+    class Config:
+        orm_mode = True
+        use_enum_values = True
+
+class ProblemDetailSchema(BaseModel):
+    """Matches frontend Problem interface."""
+    id: int
+    title: str
+    difficulty: str
+    description: str
+    examples: List[ExampleSchema] = []
+    constraints: List[str] = []
+    starterCode: Dict[str, str] = {}
+    testCases: List[TestCaseSchema] = []
+    isSolved: Optional[bool] = None
+
+    class Config:
+        orm_mode = True
+        use_enum_values = True
