@@ -11,6 +11,7 @@ services:
       - collaboration_service
       - interview_service
       - ai_results_service
+    restart: unless-stopped
     environment:
       - DATABASE_URL=postgresql://postgres:postgres@db:5432/postgres
       - AUTH_SERVICE=http://auth_service:8001
@@ -36,9 +37,10 @@ services:
       - db
     ports:
       - "8001:8001"
+    restart: unless-stopped
     environment:
       - DATABASE_URL=postgresql://postgres:postgres@db:5432/postgres
-      - JWT_SECRET_KEY=super-secret-key-change-in-production
+      - JWT_SECRET_KEY=${JWT_SECRET_KEY:-super-secret-key-change-in-production}
 
   get_service:
     build: ./get_service
@@ -48,11 +50,12 @@ services:
     ports:
       - "8002:8002"
       - "50051:50051"
+    restart: unless-stopped
     environment:
       - GET_SERVICE_URL=postgresql://postgres:postgres@db:5432/postgres
-      - GET_SERVICE=${GET_SERVICE}
       - DATABASE_URL=postgresql://postgres:postgres@db:5432/postgres
-      - JWT_SECRET_KEY=super-secret-key-change-in-production
+      - JWT_SECRET_KEY=${JWT_SECRET_KEY:-super-secret-key-change-in-production}
+      - OPENAI_API_KEY=${OPENAI_API_KEY:-}
     volumes:
       - ./data/faiss:/faiss_data
 
@@ -62,31 +65,48 @@ services:
       - db
     ports:
       - "8005:8005"
+    restart: unless-stopped
     environment:
       - DATABASE_URL=postgresql://postgres:postgres@db:5432/postgres
-      - JWT_SECRET_KEY=super-secret-key-change-in-production
+      - JWT_SECRET_KEY=${JWT_SECRET_KEY:-super-secret-key-change-in-production}
 
   ai_results_service:
     build: ./ai_results_service
     ports:
       - "8006:8006"
+    restart: unless-stopped
     environment:
       - OPENAI_API_KEY=${OPENAI_API_KEY}
       - OPENAI_MODEL=${OPENAI_MODEL:-gpt-4o-mini}
 
   collaboration_service:
     build: ./collaboration_service
+    depends_on:
+      - redis
     ports:
       - "8004:8004"
+    restart: unless-stopped
+    environment:
+      - REDIS_URL=${REDIS_URL:-redis://redis:6379}
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+
   weaviate:
     image: semitechnologies/weaviate:1.25.2
+    restart: unless-stopped
     environment:
       QUERY_DEFAULTS_LIMIT: 25
       AUTHENTICATION_ANONYMOUS_ACCESS_ENABLED: 'true'
       PERSISTENCE_DATA_PATH: './data'
       DEFAULT_VECTORIZER_MODULE: 'text2vec-openai'
       ENABLE_MODULES: 'text2vec-openai'
-      OPENAI_APIKEY: 'your-openai-api-key-here'
+      OPENAI_APIKEY: ${OPENAI_API_KEY:-}
     volumes:
       - ./weaviate_data:/var/lib/weaviate
   code_evaluations_service:
@@ -94,65 +114,63 @@ services:
     depends_on:
       - db
       - get_service
+      - python_runner
+      - c_runner
+      - cpp_runner
+      - java_runner
+      - rust_runner
+      - go_runner
+      - javascript_runner
     ports:
       - "8003:8003"
+    restart: unless-stopped
     environment:
       - CODE_EVAL_SERVICE_URL=postgresql://postgres:postgres@db:5432/postgres
-      - CODE_EVAL_SERVICE=${CODE_EVAL_SERVICE}
-      - JWT_SECRET_KEY=super-secret-key-change-in-production
-    volumes:
-      - /var/run/docker.sock:/var/run/docker.sock
-      - shared_sandbox:/sandboxes
+      - JWT_SECRET_KEY=${JWT_SECRET_KEY:-super-secret-key-change-in-production}
+      - PYTHON_RUNNER_URL=http://python_runner:9000
+      - C_RUNNER_URL=http://c_runner:9000
+      - CPP_RUNNER_URL=http://cpp_runner:9000
+      - JAVA_RUNNER_URL=http://java_runner:9000
+      - RUST_RUNNER_URL=http://rust_runner:9000
+      - GO_RUNNER_URL=http://go_runner:9000
+      - JAVASCRIPT_RUNNER_URL=http://javascript_runner:9000
 
   python_runner:
     container_name: python_runner
     build: ./code_runners/python
     image: python-runner
-    command: ["sleep", "infinity"]
-    volumes:
-      - shared_sandbox:/sandboxes
+    restart: unless-stopped
+
   c_runner:
-    build: ./code_runners/C
     container_name: c_runner
-    command: ["sleep", "infinity"]
-    volumes:
-      - shared_sandbox:/sandboxes
+    build: ./code_runners/C
+    restart: unless-stopped
 
   cpp_runner:
-    build: ./code_runners/C++
     container_name: cpp_runner
-    command: ["sleep", "infinity"]
-    volumes:
-      - shared_sandbox:/sandboxes
+    build: ./code_runners/C++
+    restart: unless-stopped
 
   java_runner:
-    build: ./code_runners/Java
     container_name: java_runner
-    command: ["sleep", "infinity"]
-    volumes:
-      - shared_sandbox:/sandboxes
+    build: ./code_runners/Java
+    restart: unless-stopped
 
   rust_runner:
-    build: ./code_runners/Rust
     container_name: rust_runner
-    command: ["sleep", "infinity"]
-    volumes:
-      - shared_sandbox:/sandboxes
+    build: ./code_runners/Rust
+    restart: unless-stopped
 
   go_runner:
-    build: ./code_runners/Go
     container_name: go_runner
-    command: ["sleep", "infinity"]
-    volumes:
-      - shared_sandbox:/sandboxes
-  
+    build: ./code_runners/Go
+    restart: unless-stopped
+
   javascript_runner:
-    build: ./code_runners/javascript
     container_name: javascript_runner
-    command: ["sleep", "infinity"]
-    volumes:
-      - shared_sandbox:/sandboxes
+    build: ./code_runners/javascript
+    restart: unless-stopped
 
 volumes:
   pgdata:
-  shared_sandbox:
+  redis_data:

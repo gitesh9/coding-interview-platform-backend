@@ -3,3 +3,6 @@ uvicorn
 sqlalchemy
 psycopg2-binary
 PyJWT
+httpx
+grpcio
+grpcio-tools

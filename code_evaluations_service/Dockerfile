@@ -2,10 +2,9 @@ FROM python:3.11-slim
 
 WORKDIR /app
 
-RUN apt-get update && apt-get install -y build-essential
-RUN apt-get update && apt-get install -y \
-    docker.io \
-    && rm -rf /var/lib/apt/lists/*
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    build-essential && \
+    rm -rf /var/lib/apt/lists/*
 
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
@@ -14,10 +13,6 @@ COPY . .
 
 EXPOSE 8003
 
-RUN pip install grpcio grpcio-tools
-
 ENV PYTHONPATH=/app
-
-CMD ["uvicorn", "app.app:app", "--host", "0.0.0.0", "--port", "8003"]
 
 CMD ["uvicorn", "app.app:app", "--host", "0.0.0.0", "--port", "8003"]

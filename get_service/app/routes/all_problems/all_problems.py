@@ -82,7 +82,7 @@ def get_search_query(
             port=8002,
     )
     client.integrations.configure([
-        Integrations.openai(api_key="...")
+        Integrations.openai(api_key=os.getenv("OPENAI_API_KEY", ""))
     ])
 
     # ✅ Ensure collection exists
