@@ -79,7 +79,8 @@ def get_search_query(
 
     # ✅ Initialize Weaviate v4 client
     client = weaviate.connect_to_local(
-            port=8002,
+            host="weaviate",
+            port=8080,
     )
     client.integrations.configure([
         Integrations.openai(api_key=os.getenv("OPENAI_API_KEY", ""))

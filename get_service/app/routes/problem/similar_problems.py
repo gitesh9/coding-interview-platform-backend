@@ -2,12 +2,7 @@
 import faiss
 import numpy as np
 from sentence_transformers import SentenceTransformer
-import numpy as np
-import numpy as np
-from sentence_transformers import SentenceTransformer
 from typing import List
-
-model = SentenceTransformer('all-MiniLM-L6-v2')
 class VectorStore:
     def __init__(self, dim:int=384, index_path:str="/faiss_data/problems.index"):
         self.model = SentenceTransformer("all-MiniLM-L6-v2")
