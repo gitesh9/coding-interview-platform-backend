@@ -62,19 +62,19 @@ def login(credentials: LoginRequest, db: Session = Depends(get_db)):
 
 @app.post("/register", response_model=AuthResponse)
 def register(data: RegisterRequest, db: Session = Depends(get_db)):
-    if db.query(User).filter(User.email == data.email).first():
-        raise HTTPException(status_code=400, detail="Email already exists")
+  if db.query(User).filter(User.email == data.email).first():
+      raise HTTPException(status_code=400, detail="Email already exists")
 
-    new_user = User(
-        name=data.name,
-        email=data.email,
-        hashed_password=hash_password(data.password),
-        role=data.role,
-    )
-    db.add(new_user)
-    db.commit()
-    db.refresh(new_user)
-    return _build_auth_response(new_user)
+  new_user = User(
+      name=data.name,
+      email=data.email,
+      hashed_password=hash_password(data.password),
+      role=data.role,
+  )
+  db.add(new_user)
+  db.commit()
+  db.refresh(new_user)
+  return _build_auth_response(new_user)
 
 
 Base.metadata.create_all(bind=engine)

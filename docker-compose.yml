@@ -12,7 +12,8 @@ services:
       - ai_results_service
     restart: unless-stopped
     environment:
-      - DATABASE_URL=postgresql://postgres:postgres@db:5432/postgres
+      - DATABASE_URL=${DATABASE_URL}
+      - REDIS_URL=${REDIS_URL}
       - AUTH_SERVICE=http://auth_service:8001
       - GET_SERVICE=http://get_service:8002
       - CODE_EVALUATIONS_SERVICE=http://code_evaluations_service:8003
@@ -20,54 +21,54 @@ services:
       - INTERVIEW_SERVICE=http://interview_service:8005
       - AI_SERVICE=http://ai_results_service:8006
 
-  db:
-    image: postgres:15
-    restart: always
-    environment:
-      POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: postgres
-      POSTGRES_DB: postgres
-    volumes:
-      - pgdata:/var/lib/postgresql/data
+  # db:
+  #   image: postgres:15
+  #   restart: always
+  #   environment:
+  #     POSTGRES_USER: postgres
+  #     POSTGRES_PASSWORD: postgres
+  #     POSTGRES_DB: postgres
+  #   volumes:
+  #     - pgdata:/var/lib/postgresql/data
 
   auth_service:
     build: ./auth_service
-    depends_on:
-      - db
+    # depends_on:
+    #   - db
     ports:
       - "8001:8001"
     restart: unless-stopped
     environment:
-      - DATABASE_URL=postgresql://postgres:postgres@db:5432/postgres
-      - JWT_SECRET_KEY=${JWT_SECRET_KEY:-super-secret-key-change-in-production}
+      - DATABASE_URL=${DATABASE_URL}
+      - JWT_SECRET_KEY=${JWT_SECRET_KEY}
 
   get_service:
     build: ./get_service
     depends_on:
-      - db
+      # - db
       - weaviate
     ports:
       - "8002:8002"
       - "50051:50051"
     restart: unless-stopped
     environment:
-      - GET_SERVICE_URL=postgresql://postgres:postgres@db:5432/postgres
-      - DATABASE_URL=postgresql://postgres:postgres@db:5432/postgres
-      - JWT_SECRET_KEY=${JWT_SECRET_KEY:-super-secret-key-change-in-production}
-      - OPENAI_API_KEY=${OPENAI_API_KEY:-}
+      - GET_SERVICE_URL=${DATABASE_URL}
+      - DATABASE_URL=${DATABASE_URL}
+      - JWT_SECRET_KEY=${JWT_SECRET_KEY}
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
     volumes:
       - ./data/faiss:/faiss_data
 
   interview_service:
     build: ./interview_service
-    depends_on:
-      - db
+    # depends_on:
+    #   - db
     ports:
       - "8005:8005"
     restart: unless-stopped
     environment:
-      - DATABASE_URL=postgresql://postgres:postgres@db:5432/postgres
-      - JWT_SECRET_KEY=${JWT_SECRET_KEY:-super-secret-key-change-in-production}
+      - DATABASE_URL=${DATABASE_URL}
+      - JWT_SECRET_KEY=${JWT_SECRET_KEY}
 
   ai_results_service:
     build: ./ai_results_service
@@ -76,7 +77,7 @@ services:
     restart: unless-stopped
     environment:
       - OPENAI_API_KEY=${OPENAI_API_KEY}
-      - OPENAI_MODEL=${OPENAI_MODEL:-gpt-4o-mini}
+      - OPENAI_MODEL=${OPENAI_MODEL}
 
   collaboration_service:
     build: ./collaboration_service
@@ -86,13 +87,11 @@ services:
       - "8004:8004"
     restart: unless-stopped
     environment:
-      - REDIS_URL=${REDIS_URL:-redis://redis:6379}
+      - REDIS_URL=${REDIS_URL}
 
   redis:
     image: redis:7-alpine
     restart: unless-stopped
-    ports:
-      - "6379:6379"
     volumes:
       - redis_data:/data
 
@@ -105,13 +104,13 @@ services:
       PERSISTENCE_DATA_PATH: './data'
       DEFAULT_VECTORIZER_MODULE: 'text2vec-openai'
       ENABLE_MODULES: 'text2vec-openai'
-      OPENAI_APIKEY: ${OPENAI_API_KEY:-}
+      OPENAI_APIKEY: ${OPENAI_API_KEY}
     volumes:
       - ./weaviate_data:/var/lib/weaviate
   code_evaluations_service:
     build: ./code_evaluations_service
     depends_on:
-      - db
+      # - db
       - get_service
       - python_runner
       - c_runner
@@ -124,8 +123,8 @@ services:
       - "8003:8003"
     restart: unless-stopped
     environment:
-      - CODE_EVAL_SERVICE_URL=postgresql://postgres:postgres@db:5432/postgres
-      - JWT_SECRET_KEY=${JWT_SECRET_KEY:-super-secret-key-change-in-production}
+      - CODE_EVAL_SERVICE_URL=${DATABASE_URL}
+      - JWT_SECRET_KEY=${JWT_SECRET_KEY}
       - PYTHON_RUNNER_URL=http://python_runner:9000
       - C_RUNNER_URL=http://c_runner:9000
       - CPP_RUNNER_URL=http://cpp_runner:9000
@@ -171,5 +170,5 @@ services:
     restart: unless-stopped
 
 volumes:
-  pgdata:
+  # pgdata:
   redis_data:
