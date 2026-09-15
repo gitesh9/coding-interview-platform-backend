@@ -1,90 +1,78 @@
 from datetime import datetime
-from typing import List, Optional, Dict, Any
-from pydantic import BaseModel
-import enum
+from typing import Dict, List, Literal, Optional
 
-class DifficultyEnum(enum.Enum):
-    easy = "easy"
-    medium = "medium"
-    hard = "hard"
-    
-class SubmissionState(enum.Enum):
-    successfull = "Accepted"
-    failed = "Wrong"
-    
-class UserProblemStatusEnum(enum.Enum):
-    solved = "solved"
-    attempted = "attempted"
-    not_attempted = "not_attempted"
-    
+from pydantic import BaseModel, ConfigDict
+
+from ..enums import DifficultyEnum, SubmissionState, UserProblemStatusEnum
+
+# The API capitalises difficulty; the DB enum stores it lowercase.
+ApiDifficulty = Literal["Easy", "Medium", "Hard"]
+
+
 class HintSchema(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
     text: str
-    
-    class Config:
-        orm_mode = True
 
 
 class SampleTestcasesSchema(BaseModel):
-    input_data :str
+    model_config = ConfigDict(from_attributes=True)
+
+    input_data: str
     expected_output: str
-    explanation: str
-    
-    class Config:
-        orm_mode = True 
+    explanation: Optional[str] = None
+
 
 class DiscussionSchema(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
     user_id: int
     comment: str
     created_at: datetime
 
-    class Config:
-        orm_mode = True 
-    
+
 class UserProblemStatusSchema(BaseModel):
+    model_config = ConfigDict(from_attributes=True, use_enum_values=True)
+
     problem_id: int
-    status: str
+    status: UserProblemStatusEnum
     last_updated: datetime
 
-    class Config:
-        orm_mode = True
-        use_enum_values = True
 
 class SubmissionSchema(BaseModel):
+    model_config = ConfigDict(from_attributes=True, use_enum_values=True)
+
     user_id: int
     code: str
     language: str
-    status: str
-    submitted_at:datetime
+    status: SubmissionState
+    submitted_at: datetime
 
-    class Config:
-        orm_mode = True 
-        use_enum_values = True
-    
+
 class ProblemResponseSchema(BaseModel):
+    model_config = ConfigDict(from_attributes=True, use_enum_values=True)
+
     id: int
     slug: str
     title: str
     description: str
-    difficulty: str
-    tags: Optional[str]
-    constraints: Optional[str]
+    difficulty: DifficultyEnum
+    tags: Optional[str] = None
+    constraints: Optional[str] = None
     hints: List[HintSchema] = []
-    sample_testcases: List[SampleTestcasesSchema] =[]
-    dicussions: List[DiscussionSchema] = []
-    submissions: List[SubmissionSchema]=[]
-    user_statuses: List[UserProblemStatusSchema]=[]
-    
-    class Config:
-        orm_mode = True
-        use_enum_values = True
+    sample_testcases: List[SampleTestcasesSchema] = []
+    discussions: List[DiscussionSchema] = []
+    submissions: List[SubmissionSchema] = []
+    user_statuses: List[UserProblemStatusSchema] = []
+
 
 class SimilarProblemResponseSchema(BaseModel):
+    model_config = ConfigDict(from_attributes=True, use_enum_values=True)
+
     id: int
     slug: str
     title: str
-    difficulty: str
-    class Config:
-        orm_mode = True
+    difficulty: DifficultyEnum
 
 
 # ─── Frontend-compatible schemas ─────────────────────────────────────────────
@@ -100,7 +88,10 @@ class TestCaseSchema(BaseModel):
     expectedOutput: str
 
 class ProblemListItemSchema(BaseModel):
-    """Matches frontend ProblemListItem interface."""
+    """Matches frontend ProblemListItem, whose difficulty is a plain string."""
+
+    model_config = ConfigDict(from_attributes=True)
+
     id: int
     slug: str
     title: str
@@ -110,22 +101,18 @@ class ProblemListItemSchema(BaseModel):
     description: str
     isSolved: Optional[bool] = None
 
-    class Config:
-        orm_mode = True
-        use_enum_values = True
 
 class ProblemDetailSchema(BaseModel):
     """Matches frontend Problem interface."""
+
+    model_config = ConfigDict(from_attributes=True)
+
     id: int
     title: str
-    difficulty: str
+    difficulty: ApiDifficulty
     description: str
     examples: List[ExampleSchema] = []
     constraints: List[str] = []
     starterCode: Dict[str, str] = {}
     testCases: List[TestCaseSchema] = []
     isSolved: Optional[bool] = None
-
-    class Config:
-        orm_mode = True
-        use_enum_values = True

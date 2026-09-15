@@ -5,13 +5,13 @@ from sqlalchemy.orm import Session
 from ...db.session import SessionLocal
 from ...db.models.models import Problem, UserProblemStatus, UserProblemStatusEnum
 from ...db.schemas.schemas import (
+    ApiDifficulty,
     ProblemDetailSchema,
     ExampleSchema,
     TestCaseSchema,
-    SimilarProblemResponseSchema,
 )
 from sqlalchemy.orm import Session
-from typing import Dict, List, Optional, Union
+from typing import Dict, List, Optional, cast
 from .similar_problems import vector_store
 import os
 import jwt
@@ -41,27 +41,35 @@ def get_db():
 
 router: APIRouter = APIRouter()
 
-def _to_frontend_problem(problem: Problem, is_solved: Optional[bool] = None) -> dict:
+def _to_frontend_problem(problem: Problem, is_solved: Optional[bool] = None) -> ProblemDetailSchema:
     """Convert a DB Problem row to the frontend Problem interface shape."""
     # Map sample_testcases → examples
     examples = [
-        {"input": tc.input_data, "output": tc.expected_output, "explanation": tc.explanation}
+        ExampleSchema(
+            input=tc.input_data or "",
+            output=tc.expected_output or "",
+            explanation=tc.explanation,
+        )
         for tc in (problem.sample_testcases or [])
     ]
 
     # Map sample_testcases → testCases (frontend TestCase shape)
     test_cases = [
-        {"id": tc.id, "input": tc.input_data, "expectedOutput": tc.expected_output}
+        TestCaseSchema(
+            id=tc.id,
+            input=tc.input_data or "",
+            expectedOutput=tc.expected_output or "",
+        )
         for tc in (problem.sample_testcases or [])
     ]
 
     # constraints: stored as a single string, split into list
-    constraints_list = []
+    constraints_list: List[str] = []
     if problem.constraints:
         constraints_list = [c.strip() for c in problem.constraints.split("\n") if c.strip()]
 
     # starterCode: code_templates JSONB → dict
-    starter_code = {}
+    starter_code: Dict[str, str] = {}
     if problem.code_templates:
         if isinstance(problem.code_templates, str):
             starter_code = json.loads(problem.code_templates)
@@ -70,22 +78,21 @@ def _to_frontend_problem(problem: Problem, is_solved: Optional[bool] = None) -> 
 
     # Capitalize difficulty to match frontend ('Easy', 'Medium', 'Hard')
     difficulty = problem.difficulty.value if hasattr(problem.difficulty, 'value') else str(problem.difficulty)
-    difficulty = difficulty.capitalize()
 
-    return {
-        "id": problem.id,
-        "title": problem.title,
-        "difficulty": difficulty,
-        "description": problem.description,
-        "examples": examples,
-        "constraints": constraints_list,
-        "starterCode": starter_code,
-        "testCases": test_cases,
-        "isSolved": is_solved,
-    }
+    return ProblemDetailSchema(
+        id=problem.id,
+        title=problem.title,
+        difficulty=cast(ApiDifficulty, difficulty.capitalize()),
+        description=problem.description,
+        examples=examples,
+        constraints=constraints_list,
+        starterCode=starter_code,
+        testCases=test_cases,
+        isSolved=is_solved,
+    )
 
 
-@router.get('/problems/{value}')
+@router.get('/problems/{value}', response_model=ProblemDetailSchema)
 def get_problem_details(
     value: str,
     db: Session = Depends(get_db),

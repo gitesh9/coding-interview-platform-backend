@@ -1,5 +1,6 @@
 fastapi
 uvicorn
+pydantic>=2
 sqlalchemy
 psycopg2-binary
 weaviate-client

@@ -2,22 +2,8 @@ from sqlalchemy import Column, Integer, String, Text, Enum, ForeignKey, DateTime
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import relationship
 from ...db.session import Base
-import enum
+from ..enums import DifficultyEnum, SubmissionState, UserProblemStatusEnum
 from datetime import datetime
-
-
-class DifficultyEnum(enum.Enum):
-    easy = "easy"
-    medium = "medium"
-    hard = "hard"
-class SubmissionState(enum.Enum):
-    successfull = "Accepted"
-    failed = "Wrong"
-    
-class UserProblemStatusEnum(enum.Enum):
-    solved = "solved"
-    attempted = "attempted"
-    not_attempted = "not_attempted"
 
 class SampleTestcases(Base):
     __tablename__ = "sample_testcases"

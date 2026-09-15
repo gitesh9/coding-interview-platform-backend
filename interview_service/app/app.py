@@ -12,7 +12,10 @@ from .db.models import InterviewSession, SessionStatus, User, Problem
 from .auth import get_current_user_id
 
 app = FastAPI()
-Base.metadata.create_all(bind=engine)
+
+# users/problems are owned by auth_service/get_service; creating them here would
+# win the startup race and produce those tables without their full column set.
+Base.metadata.create_all(bind=engine, tables=[InterviewSession.__table__])
 
 
 def get_db():

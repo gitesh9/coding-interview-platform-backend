@@ -47,35 +47,35 @@ def get_db():
 
 router: APIRouter = APIRouter()
 
-def _to_list_item(p: Problem, solved_ids: Set[int]) -> dict:
+def _to_list_item(p: Problem, solved_ids: Set[int]) -> ProblemListItemSchema:
     difficulty = p.difficulty.value if hasattr(p.difficulty, 'value') else str(p.difficulty)
-    return {
-        "id": p.id,
-        "slug": p.slug,
-        "title": p.title,
-        "difficulty": difficulty.capitalize(),
-        "tags": p.tags,
-        "constraints": p.constraints,
-        "description": p.description,
-        "isSolved": p.id in solved_ids,
-    }
+    return ProblemListItemSchema(
+        id=p.id,
+        slug=p.slug,
+        title=p.title,
+        difficulty=difficulty.capitalize(),
+        tags=p.tags,
+        constraints=p.constraints,
+        description=p.description,
+        isSolved=p.id in solved_ids,
+    )
 
-@router.get('/problems-set/')
+@router.get('/problems-set/', response_model=List[ProblemListItemSchema])
 def get_all_problems(
     db: Session = Depends(get_db),
     authorization: str = Header(default=""),
-):
+) -> List[ProblemListItemSchema]:
     user_id = _get_user_id(authorization)
     solved_ids = _get_solved_problem_ids(db, user_id) if user_id else set()
     problems = db.query(Problem).all()
     return [_to_list_item(p, solved_ids) for p in problems]
 
 
-@router.get('/problems')
+@router.get('/problems', response_model=List[ProblemListItemSchema])
 def get_search_query(
     value: str = Query(..., description="Search query string"),
     db: Session = Depends(get_db),
-):
+) -> List[ProblemListItemSchema]:
 
     # ✅ Initialize Weaviate v4 client
     client = weaviate.connect_to_local(
@@ -117,19 +117,18 @@ def get_search_query(
     )
 
     # ✅ Convert Weaviate results to ProblemListItem format
-    problems = []
+    problems: List[ProblemListItemSchema] = []
     for obj in results.objects:
         props = obj.properties
-        difficulty = str(props.get("difficulty", "")).capitalize()
-        problems.append({
-            "id": 0,
-            "slug": "",
-            "title": str(props.get("title", "")),
-            "difficulty": difficulty,
-            "tags": str(props.get("tags", "")),
-            "constraints": str(props.get("constraints", "")),
-            "description": str(props.get("description", "")),
-            "isSolved": None,
-        })
+        problems.append(ProblemListItemSchema(
+            id=0,
+            slug="",
+            title=str(props.get("title", "")),
+            difficulty=str(props.get("difficulty", "")).capitalize(),
+            tags=str(props.get("tags", "")),
+            constraints=str(props.get("constraints", "")),
+            description=str(props.get("description", "")),
+            isSolved=None,
+        ))
 
     return problems
