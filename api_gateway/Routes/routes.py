@@ -61,6 +61,9 @@ async def proxy_get(path: str, request: Request):
 # ─── Code execution proxy ────────────────────────────────────────────────────
 
 @router.api_route("/problems/{problemId}/run", methods=["POST"])
+@router.api_route("/problems/{problemId}/sample", methods=["POST"])
+@router.api_route("/code_eval/{problemId}/sample", methods=["POST"])
+@router.api_route("/code-eval/{problemId}/sample", methods=["POST"])
 async def proxy_run(problemId: str, request: Request):
     body = await request.body()
     async with httpx.AsyncClient() as client:
@@ -70,19 +73,23 @@ async def proxy_run(problemId: str, request: Request):
                 url=f"{CODE_EVALUATION_SERVICE}/{problemId}/sample",
                 headers={k: v for k, v in request.headers.items() if k.lower() != "host"},
                 content=body,
+                timeout=30.0,
             )
         except httpx.RequestError as e:
-            return JSONResponse(status_code=502, content={"error": "Gateway request failed", "detail": str(e)})
+            return JSONResponse(status_code=502, content={"status": "Runtime Error", "error": f"Gateway request failed: {e}", "testCasesPassed": 0, "totalTestCases": 0, "testCaseResults": []})
 
     try:
         content = response.json()
     except Exception:
-        content = {"error": "Non-JSON response", "raw": response.text}
+        content = {"status": "Runtime Error", "error": response.text or "Non-JSON response from code evaluation service", "testCasesPassed": 0, "totalTestCases": 0, "testCaseResults": []}
 
-    return JSONResponse(status_code=response.status_code, content=content)
+    return JSONResponse(status_code=response.status_code if response.status_code < 500 else 200, content=content)
 
 
 @router.api_route("/problems/{problemId}/submit", methods=["POST"])
+@router.api_route("/problems/{problemId}/evaluate", methods=["POST"])
+@router.api_route("/code_eval/{problemId}/evaluate", methods=["POST"])
+@router.api_route("/code-eval/{problemId}/evaluate", methods=["POST"])
 async def proxy_submit(problemId: str, request: Request):
     body = await request.body()
     async with httpx.AsyncClient() as client:

@@ -85,6 +85,17 @@ class ProblemService(ProblemServiceServicer):
                     if k not in template:
                         template[k] = v
 
+            # Embed sample testcases so downstream evaluation services receive them cleanly
+            template["sample_testcases"] = [
+                {
+                    "id": tc.id,
+                    "input": str(tc.input_data or ""),
+                    "expectedOutput": str(tc.expected_output or ""),
+                    "explanation": str(tc.explanation or ""),
+                }
+                for tc in (problem.sample_testcases or [])
+            ]
+
             input_schema_str = "{}"
             if isinstance(problem.input_schema, (dict, list)):
                 input_schema_str = json.dumps(problem.input_schema)

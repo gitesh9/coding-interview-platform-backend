@@ -72,6 +72,23 @@ def _get_problem_from_db_fallback(problem_id: str, lang: str) -> Optional[Proble
                 else:
                     input_schema_str = "{}"
 
+                try:
+                    tc_rows = db.execute(
+                        text("SELECT id, input_data, expected_output, explanation FROM sample_testcases WHERE problem_id = :pid ORDER BY id"),
+                        {"pid": row[0]}
+                    ).fetchall()
+                    parsed_tmpl["sample_testcases"] = [
+                        {
+                            "id": r[0],
+                            "input": str(r[1] or ""),
+                            "expectedOutput": str(r[2] or ""),
+                            "explanation": str(r[3] or ""),
+                        }
+                        for r in tc_rows
+                    ]
+                except Exception as tc_err:
+                    print(f"Could not load sample testcases for problem {row[0]}: {tc_err}")
+
                 return Problem(
                     problem_id=str(row[0]),
                     title=str(row[1] or ""),
