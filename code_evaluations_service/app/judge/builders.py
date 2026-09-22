@@ -20,11 +20,13 @@ if __res is not None:
 """
         return user_code + "\n" + test_wrapper
 
-    # Intelligent auto-harness when input_parsing or function_call is missing/empty
+    # Intelligent auto-harness supporting JSON, LeetCode assignments, tuples, and multiline inputs
     harness = '''
 import sys
 import json
 import inspect
+import ast
+import re
 
 def _run_harness():
     raw_input = sys.stdin.read().strip()
@@ -49,6 +51,7 @@ def _run_harness():
     kwargs = {}
 
     if raw_input:
+        # 1. Standard JSON parse
         try:
             parsed = json.loads(raw_input)
             if isinstance(parsed, dict) and any(p in parsed for p in param_names):
@@ -59,18 +62,81 @@ def _run_harness():
                 args = parsed
             elif isinstance(parsed, dict):
                 args = list(parsed.values())
-            else:
+            elif len(param_names) == 1:
                 args = [parsed]
         except Exception:
+            pass
+
+        # 2. Pseudo-JSON with unquoted keys: e.g. '{nums: [2,7,11,15], target: 9}' or 'nums: [2,7,11,15], target: 9'
+        if not kwargs and not args and ':' in raw_input:
+            try:
+                pseudo = raw_input
+                if not pseudo.startswith('{'):
+                    pseudo = '{' + pseudo + '}'
+                pseudo = re.sub(r'([a-zA-Z_]\\w*)\\s*:', r'"\\1":', pseudo)
+                parsed = json.loads(pseudo)
+                if isinstance(parsed, dict) and any(p in parsed for p in param_names):
+                    for p in param_names:
+                        if p in parsed:
+                            kwargs[p] = parsed[p]
+            except Exception:
+                pass
+
+        # 3. Variable assignments: e.g. 'nums = [2,7,11,15], target = 9' or multiline
+        if not kwargs and not args and '=' in raw_input:
+            norm = raw_input
+            for p in param_names:
+                norm = re.sub(r',\\s*(?=' + re.escape(p) + r'\\s*=)', chr(10), norm)
+            norm = re.sub(r',\\s*(?=[a-zA-Z_]\\w*\\s*=)', chr(10), norm)
+
+            env = {}
+            try:
+                tree = ast.parse(norm)
+                for stmt in tree.body:
+                    if isinstance(stmt, ast.Assign):
+                        for target in stmt.targets:
+                            if isinstance(target, ast.Name):
+                                try:
+                                    env[target.id] = ast.literal_eval(stmt.value)
+                                except Exception:
+                                    pass
+                if any(p in env for p in param_names):
+                    for p in param_names:
+                        if p in env:
+                            kwargs[p] = env[p]
+            except Exception:
+                pass
+
+        # 4. Comma-separated Python literal values or tuple: e.g. '[2,7,11,15], 9'
+        if not kwargs and not args:
+            try:
+                val = ast.literal_eval(raw_input)
+                if isinstance(val, tuple) and len(val) == len(param_names):
+                    args = list(val)
+                elif len(param_names) == 1:
+                    args = [val]
+            except Exception:
+                pass
+
+        # 5. Line-by-line fallback
+        if not kwargs and not args:
             lines = raw_input.splitlines()
             for line in lines:
+                line = line.strip()
+                if not line:
+                    continue
                 try:
                     args.append(json.loads(line))
                 except Exception:
-                    args.append(line.strip())
+                    try:
+                        args.append(ast.literal_eval(line))
+                    except Exception:
+                        args.append(line)
 
     try:
-        if kwargs:
+        if kwargs and len(kwargs) == len(param_names):
+            res = method(**kwargs)
+        elif kwargs and not args:
             res = method(**kwargs)
         elif len(args) == len(param_names):
             res = method(*args)
@@ -79,7 +145,7 @@ def _run_harness():
         else:
             res = method()
     except Exception as e:
-        sys.stderr.write(str(e) + "\\n")
+        sys.stderr.write(str(e) + chr(10))
         sys.exit(1)
 
     if res is not None:
@@ -196,9 +262,18 @@ function _runHarness() {
                 args = [parsed];
             }
         } catch (e) {
-            args = rawInput.split('\\n').map(l => {
-                try { return JSON.parse(l); } catch (_) { return l.trim(); }
-            });
+            if (rawInput.includes('=')) {
+                try {
+                    const normalized = rawInput.replace(/,\s*(?=[a-zA-Z_]\w*\s*=)/g, '; ');
+                    const fn = new Function('let ' + normalized + '; return [' + normalized.split(';').map(s => s.split('=')[0].trim()).filter(Boolean).join(', ') + '];');
+                    args = fn();
+                } catch (_) {}
+            }
+            if (!args || args.length === 0) {
+                args = rawInput.split('\\n').map(l => {
+                    try { return JSON.parse(l); } catch (_) { return l.trim(); }
+                });
+            }
         }
     }
 
