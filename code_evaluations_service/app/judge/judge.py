@@ -75,16 +75,23 @@ def run_code(
             )
             response.raise_for_status()
             data = response.json()
+            if isinstance(data, str):
+                try:
+                    data = json.loads(data)
+                except Exception:
+                    data = {"output": data, "error": "", "runtime": "0", "results": ""}
+            if not isinstance(data, dict):
+                data = {"output": str(data or ""), "error": "", "runtime": "0", "results": ""}
     except httpx.HTTPError as e:
         return ("", f"Runner unavailable: {e}", "-1", "")
     except Exception as e:
         return ("", f"Runner error: {e}", "-1", "")
 
     return (
-        (data.get("output") or "").strip(),
-        (data.get("error") or "").strip(),
-        (data.get("runtime") or "").strip(),
-        (data.get("results") or "").strip(),
+        str(data.get("output") or "").strip() if isinstance(data, dict) else "",
+        str(data.get("error") or "").strip() if isinstance(data, dict) else "",
+        str(data.get("runtime") or "").strip() if isinstance(data, dict) else "-1",
+        str(data.get("results") or "").strip() if isinstance(data, dict) else "",
     )
 
 

@@ -67,6 +67,8 @@ def _build_submission_result(raw_results: List[Dict[str, Any]], error: str = "",
     test_case_results = []
     passed_count = 0
     for i, r in enumerate(raw_results):
+        if not isinstance(r, dict):
+            r = {"status": "Failed", "output": str(r)}
         is_passed = r.get("status") == "Accepted"
         if is_passed:
             passed_count += 1
@@ -116,14 +118,80 @@ def _compare_outputs(actual: str, expected: str) -> bool:
     return False
 
 
-def _fetch_sample_testcases(problem, parsed_tmpl: dict, problem_id_str: str) -> List[Dict[str, Any]]:
+def _safe_parse_json(val: Any) -> Any:
+    """Recursively parse JSON strings (handling double/triple encoding) into dict or list."""
+    if val is None:
+        return {}
+    if isinstance(val, (dict, list)):
+        return val
+    if isinstance(val, str):
+        cur = val.strip()
+        for _ in range(3):
+            if not isinstance(cur, str):
+                break
+            cur_stripped = cur.strip()
+            if (cur_stripped.startswith("{") and cur_stripped.endswith("}")) or (cur_stripped.startswith("[") and cur_stripped.endswith("]")):
+                try:
+                    cur = json.loads(cur_stripped)
+                except Exception:
+                    break
+            else:
+                break
+        return cur
+    return val
+
+
+def _normalize_testcases(raw_tcs: Any) -> List[Dict[str, Any]]:
+    if not raw_tcs:
+        return []
+    parsed = _safe_parse_json(raw_tcs)
+    if not isinstance(parsed, list):
+        if isinstance(parsed, dict):
+            parsed = [parsed]
+        elif isinstance(parsed, str) and parsed.strip():
+            parsed = [{"input": parsed.strip(), "expectedOutput": ""}]
+        else:
+            return []
+
+    normalized = []
+    for i, item in enumerate(parsed):
+        if isinstance(item, str):
+            sub = _safe_parse_json(item)
+            if isinstance(sub, dict):
+                item = sub
+            else:
+                item = {"input": item, "expectedOutput": ""}
+        if isinstance(item, dict):
+            inp = item.get("input")
+            if inp is None:
+                inp = item.get("input_data") or item.get("stdin") or item.get("Testcases") or ""
+            exp = item.get("expectedOutput")
+            if exp is None:
+                exp = item.get("expected_output") or item.get("output") or item.get("expected") or ""
+            tc_id = item.get("id") or (i + 1)
+            normalized.append({
+                "id": tc_id,
+                "input": str(inp),
+                "expectedOutput": str(exp),
+                "explanation": str(item.get("explanation") or ""),
+            })
+    return normalized
+
+
+def _fetch_sample_testcases(problem, parsed_tmpl: Any, problem_id_str: str) -> List[Dict[str, Any]]:
     # 1. Check embedded in parsed execution_template
     if isinstance(parsed_tmpl, dict) and "sample_testcases" in parsed_tmpl:
-        tcs = parsed_tmpl.get("sample_testcases")
-        if isinstance(tcs, list) and len(tcs) > 0:
+        tcs = _normalize_testcases(parsed_tmpl.get("sample_testcases"))
+        if tcs:
             return tcs
 
-    # 2. Query direct from DB sample_testcases table
+    # 2. Check problem attributes (if problem object has sample_testcases)
+    if hasattr(problem, "sample_testcases"):
+        tcs = _normalize_testcases(getattr(problem, "sample_testcases"))
+        if tcs:
+            return tcs
+
+    # 3. Query direct from DB sample_testcases table
     pid = None
     if hasattr(problem, 'problem_id') and str(problem.problem_id).isdigit():
         pid = int(problem.problem_id)
@@ -157,9 +225,11 @@ def _fetch_sample_testcases(problem, parsed_tmpl: dict, problem_id_str: str) -> 
     return []
 
 
-def _extract_template_for_language(parsed_templates: dict, language: str) -> dict:
-    if not isinstance(parsed_templates, dict):
+def _extract_template_for_language(parsed_templates: Any, language: str) -> dict:
+    parsed = _safe_parse_json(parsed_templates)
+    if not isinstance(parsed, dict):
         return {}
+
     lang_lower = (language or "").lower().strip()
     alias_map = {
         "py": ["python3", "python"],
@@ -172,11 +242,32 @@ def _extract_template_for_language(parsed_templates: dict, language: str) -> dic
         "golang": ["go", "golang"],
     }
     candidates = [language, lang_lower] + alias_map.get(lang_lower, [])
+
+    # 1. Match candidate keys
     for c in candidates:
-        if c in parsed_templates and isinstance(parsed_templates[c], dict):
-            return parsed_templates[c]
-    # Fallback to python3 / python or first available dict template
-    return parsed_templates.get("python3") or parsed_templates.get("python") or {}
+        if c in parsed:
+            val = _safe_parse_json(parsed[c])
+            if isinstance(val, dict):
+                return val
+
+    # 2. Top-level template (no language nesting)
+    if "input_parser" in parsed or "function_call" in parsed:
+        return parsed
+
+    # 3. Known language fallbacks
+    for fallback in ["python3", "python", "javascript", "cpp", "c", "java", "go", "rust"]:
+        if fallback in parsed:
+            val = _safe_parse_json(parsed[fallback])
+            if isinstance(val, dict):
+                return val
+
+    # 4. Search all values in dict
+    for v in parsed.values():
+        val = _safe_parse_json(v)
+        if isinstance(val, dict) and ("input_parser" in val or "function_call" in val):
+            return val
+
+    return {}
 
 
 @app.post("/{problemId}/evaluate")
@@ -190,14 +281,13 @@ async def eval_code(
         if not problem:
             return {"status": "Runtime Error", "error": f"Problem '{problemId}' not found"}
 
-        try:
-            parsed = json.loads(problem.execution_template) if isinstance(problem.execution_template, str) else (problem.execution_template or {})
-        except Exception:
+        parsed = _safe_parse_json(problem.execution_template) if hasattr(problem, "execution_template") else {}
+        if not isinstance(parsed, dict):
             parsed = {}
 
         lang_template = _extract_template_for_language(parsed, submission.language)
-        input_parser = lang_template.get('input_parser', '')
-        function_call = lang_template.get('function_call', '')
+        input_parser = str(lang_template.get('input_parser') or '')
+        function_call = str(lang_template.get('function_call') or '')
 
         sample_testcases = _fetch_sample_testcases(problem, parsed, problemId)
         if not sample_testcases:
@@ -209,9 +299,14 @@ async def eval_code(
         last_runtime = "0"
 
         for i, tc in enumerate(sample_testcases):
-            tc_input = str(tc.get("input") or "")
-            tc_expected = str(tc.get("expectedOutput") or "")
-            tc_id = tc.get("id") or (i + 1)
+            if isinstance(tc, dict):
+                tc_input = str(tc.get("input") or tc.get("input_data") or "")
+                tc_expected = str(tc.get("expectedOutput") or tc.get("expected_output") or "")
+                tc_id = tc.get("id") or (i + 1)
+            else:
+                tc_input = str(tc)
+                tc_expected = ""
+                tc_id = i + 1
 
             output, error, runtime, _ = run_code(
                 user_code=submission.code,
@@ -322,14 +417,13 @@ def eval_code_sample(problemId: str, submission: CodeSubmission):
                 "testCaseResults": [],
             }
 
-        try:
-            parsed = json.loads(problem.execution_template) if isinstance(problem.execution_template, str) else (problem.execution_template or {})
-        except Exception:
+        parsed = _safe_parse_json(problem.execution_template) if hasattr(problem, "execution_template") else {}
+        if not isinstance(parsed, dict):
             parsed = {}
 
         client_lang_template = _extract_template_for_language(parsed, submission.language)
-        input_parser = client_lang_template.get('input_parser', '')
-        function_call = client_lang_template.get('function_call', '')
+        input_parser = str(client_lang_template.get('input_parser') or '')
+        function_call = str(client_lang_template.get('function_call') or '')
 
         # Fetch sample test cases
         sample_testcases = _fetch_sample_testcases(problem, parsed, problemId)
@@ -342,9 +436,14 @@ def eval_code_sample(problemId: str, submission: CodeSubmission):
         last_runtime = "0"
 
         for i, tc in enumerate(sample_testcases):
-            tc_input = str(tc.get("input") or "")
-            tc_expected = str(tc.get("expectedOutput") or "")
-            tc_id = tc.get("id") or (i + 1)
+            if isinstance(tc, dict):
+                tc_input = str(tc.get("input") or tc.get("input_data") or "")
+                tc_expected = str(tc.get("expectedOutput") or tc.get("expected_output") or "")
+                tc_id = tc.get("id") or (i + 1)
+            else:
+                tc_input = str(tc)
+                tc_expected = ""
+                tc_id = i + 1
 
             output, error, runtime, _ = run_code(
                 user_code=submission.code,

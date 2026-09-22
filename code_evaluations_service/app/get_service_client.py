@@ -54,14 +54,20 @@ def _get_problem_from_db_fallback(problem_id: str, lang: str) -> Optional[Proble
 
             if row:
                 exec_tmpl = row[5]
-                if isinstance(exec_tmpl, str):
-                    try:
-                        parsed_tmpl = json.loads(exec_tmpl)
-                    except Exception:
-                        parsed_tmpl = {}
-                elif isinstance(exec_tmpl, dict):
-                    parsed_tmpl = exec_tmpl
-                else:
+                parsed_tmpl = exec_tmpl
+                for _ in range(3):
+                    if isinstance(parsed_tmpl, str):
+                        s = parsed_tmpl.strip()
+                        if (s.startswith("{") and s.endswith("}")) or (s.startswith("[") and s.endswith("]")):
+                            try:
+                                parsed_tmpl = json.loads(s)
+                            except Exception:
+                                break
+                        else:
+                            break
+                    else:
+                        break
+                if not isinstance(parsed_tmpl, dict):
                     parsed_tmpl = {}
 
                 input_schema = row[2]

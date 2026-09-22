@@ -40,15 +40,29 @@ class ProblemService(ProblemServiceServicer):
 
             # Normalize execution_template
             exec_tmpl = problem.execution_template
-            if isinstance(exec_tmpl, str):
-                try:
-                    exec_tmpl = json.loads(exec_tmpl)
-                except Exception:
-                    exec_tmpl = {}
-            elif not isinstance(exec_tmpl, dict):
+            for _ in range(3):
+                if isinstance(exec_tmpl, str):
+                    s = exec_tmpl.strip()
+                    if (s.startswith("{") and s.endswith("}")) or (s.startswith("[") and s.endswith("]")):
+                        try:
+                            exec_tmpl = json.loads(s)
+                        except Exception:
+                            break
+                    else:
+                        break
+                else:
+                    break
+            if not isinstance(exec_tmpl, dict):
                 exec_tmpl = {}
 
             python_tmpl = exec_tmpl.get("python3") or exec_tmpl.get("python") or {}
+            if isinstance(python_tmpl, str):
+                try:
+                    python_tmpl = json.loads(python_tmpl)
+                except Exception:
+                    pass
+            if not isinstance(python_tmpl, dict):
+                python_tmpl = {}
 
             req_lang = str(request.language or "").lower().strip()
             lang_alias_map = {
@@ -73,6 +87,13 @@ class ProblemService(ProblemServiceServicer):
                 or exec_tmpl.get(request.language)
                 or python_tmpl
             )
+            if isinstance(selected_tmpl, str):
+                try:
+                    selected_tmpl = json.loads(selected_tmpl)
+                except Exception:
+                    pass
+            if not isinstance(selected_tmpl, dict):
+                selected_tmpl = {}
 
             template = {
                 "python3": python_tmpl,
