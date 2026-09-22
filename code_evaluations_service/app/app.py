@@ -251,7 +251,7 @@ def _extract_template_for_language(parsed_templates: Any, language: str) -> dict
                 return val
 
     # 2. Top-level template (no language nesting)
-    if "input_parser" in parsed or "function_call" in parsed:
+    if any(k in parsed for k in ["input_parser", "function_call", "input_parsing", "inputParser", "functionCall"]):
         return parsed
 
     # 3. Known language fallbacks
@@ -264,7 +264,7 @@ def _extract_template_for_language(parsed_templates: Any, language: str) -> dict
     # 4. Search all values in dict
     for v in parsed.values():
         val = _safe_parse_json(v)
-        if isinstance(val, dict) and ("input_parser" in val or "function_call" in val):
+        if isinstance(val, dict) and any(k in val for k in ["input_parser", "function_call", "input_parsing", "inputParser", "functionCall"]):
             return val
 
     return {}
@@ -286,8 +286,18 @@ async def eval_code(
             parsed = {}
 
         lang_template = _extract_template_for_language(parsed, submission.language)
-        input_parser = str(lang_template.get('input_parser') or '')
-        function_call = str(lang_template.get('function_call') or '')
+        input_parser = str(
+            lang_template.get('input_parser')
+            or lang_template.get('input_parsing')
+            or lang_template.get('inputParser')
+            or ''
+        )
+        function_call = str(
+            lang_template.get('function_call')
+            or lang_template.get('functionCall')
+            or lang_template.get('call')
+            or ''
+        )
 
         sample_testcases = _fetch_sample_testcases(problem, parsed, problemId)
         if not sample_testcases:
@@ -422,8 +432,18 @@ def eval_code_sample(problemId: str, submission: CodeSubmission):
             parsed = {}
 
         client_lang_template = _extract_template_for_language(parsed, submission.language)
-        input_parser = str(client_lang_template.get('input_parser') or '')
-        function_call = str(client_lang_template.get('function_call') or '')
+        input_parser = str(
+            client_lang_template.get('input_parser')
+            or client_lang_template.get('input_parsing')
+            or client_lang_template.get('inputParser')
+            or ''
+        )
+        function_call = str(
+            client_lang_template.get('function_call')
+            or client_lang_template.get('functionCall')
+            or client_lang_template.get('call')
+            or ''
+        )
 
         # Fetch sample test cases
         sample_testcases = _fetch_sample_testcases(problem, parsed, problemId)

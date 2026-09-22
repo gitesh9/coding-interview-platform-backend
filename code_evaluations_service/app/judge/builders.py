@@ -1,9 +1,97 @@
 def build_python_main(user_code: str, input_parsing: str, function_call: str) -> str:
-    test_wrapper = f"""
-{input_parsing}
-{function_call}
+    ip = (input_parsing or "").strip()
+    fc = (function_call or "").strip()
+
+    if ip and fc:
+        if not (fc.startswith("print(") or fc.startswith("print ")):
+            fc_code = f"""__res = {fc}
+if __res is not None:
+    import json
+    if isinstance(__res, (list, dict, bool)):
+        print(json.dumps(__res, separators=(',', ':')))
+    else:
+        print(__res)"""
+        else:
+            fc_code = fc
+
+        test_wrapper = f"""
+{ip}
+{fc_code}
 """
-    return user_code + "\n" + test_wrapper
+        return user_code + "\n" + test_wrapper
+
+    # Intelligent auto-harness when input_parsing or function_call is missing/empty
+    harness = '''
+import sys
+import json
+import inspect
+
+def _run_harness():
+    raw_input = sys.stdin.read().strip()
+    if 'Solution' not in globals():
+        return
+    sol = Solution()
+    methods = [
+        m for m in dir(sol)
+        if not m.startswith('_') and callable(getattr(sol, m))
+    ]
+    if not methods:
+        return
+    method_name = methods[0]
+    method = getattr(sol, method_name)
+    try:
+        sig = inspect.signature(method)
+        param_names = [p.name for p in sig.parameters.values() if p.name != 'self']
+    except Exception:
+        param_names = []
+
+    args = []
+    kwargs = {}
+
+    if raw_input:
+        try:
+            parsed = json.loads(raw_input)
+            if isinstance(parsed, dict) and any(p in parsed for p in param_names):
+                for p in param_names:
+                    if p in parsed:
+                        kwargs[p] = parsed[p]
+            elif isinstance(parsed, list) and len(parsed) == len(param_names) and len(param_names) > 1:
+                args = parsed
+            elif isinstance(parsed, dict):
+                args = list(parsed.values())
+            else:
+                args = [parsed]
+        except Exception:
+            lines = raw_input.splitlines()
+            for line in lines:
+                try:
+                    args.append(json.loads(line))
+                except Exception:
+                    args.append(line.strip())
+
+    try:
+        if kwargs:
+            res = method(**kwargs)
+        elif len(args) == len(param_names):
+            res = method(*args)
+        elif args:
+            res = method(*args)
+        else:
+            res = method()
+    except Exception as e:
+        sys.stderr.write(str(e) + "\\n")
+        sys.exit(1)
+
+    if res is not None:
+        if isinstance(res, (list, dict, bool)):
+            print(json.dumps(res, separators=(',', ':')))
+        else:
+            print(res)
+
+if __name__ == '__main__':
+    _run_harness()
+'''
+    return user_code + "\n" + harness
 
 def build_c_main(user_code: str, input_parsing: str, function_call: str) -> str:
     return f"""
@@ -68,24 +156,79 @@ func main() {{
 """
 
 def build_javascript_main(user_code: str, input_parsing: str, function_call: str) -> str:
-    return f"""
+    ip = (input_parsing or "").strip()
+    fc = (function_call or "").strip()
+
+    if ip and fc:
+        return f"""
 {user_code}
 
 function main() {{
     const s = new Solution();
-    {input_parsing}
-    console.log({function_call});
+    {ip}
+    console.log({fc});
 }}
 
 main();
 """
 
+    harness = """
+const fs = require('fs');
+
+function _runHarness() {
+    if (typeof Solution === 'undefined') return;
+    const s = new Solution();
+    const rawInput = fs.readFileSync(0, 'utf-8').trim();
+    const proto = Object.getPrototypeOf(s);
+    const methods = Object.getOwnPropertyNames(proto).filter(m => m !== 'constructor' && typeof s[m] === 'function');
+    if (methods.length === 0) return;
+    const methodName = methods[0];
+
+    let args = [];
+    if (rawInput) {
+        try {
+            const parsed = JSON.parse(rawInput);
+            if (typeof parsed === 'object' && parsed !== null && !Array.isArray(parsed)) {
+                args = Object.values(parsed);
+            } else if (Array.isArray(parsed)) {
+                args = parsed;
+            } else {
+                args = [parsed];
+            }
+        } catch (e) {
+            args = rawInput.split('\\n').map(l => {
+                try { return JSON.parse(l); } catch (_) { return l.trim(); }
+            });
+        }
+    }
+
+    try {
+        const res = s[methodName](...args);
+        if (res !== undefined) {
+            console.log(typeof res === 'object' ? JSON.stringify(res) : res);
+        }
+    } catch (err) {
+        process.stderr.write(String(err));
+        process.exit(1);
+    }
+}
+
+_runHarness();
+"""
+    return user_code + "\n" + harness
+
+
 builder_map = {
     "python": build_python_main,
+    "python3": build_python_main,
+    "py": build_python_main,
     "c": build_c_main,
     "cpp": build_cpp_main,
+    "c++": build_cpp_main,
     "java": build_java_main,
     "rust": build_rust_main,
     "go": build_go_main,
+    "golang": build_go_main,
     "javascript": build_javascript_main,
+    "js": build_javascript_main,
 }
