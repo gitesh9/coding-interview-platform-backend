@@ -45,8 +45,18 @@ def run_code(
     Returns (output, error, runtime, results) — same shape as the previous
     docker-exec implementation so callers (sample_tests, app.py) don't change.
     """
+    norm_lang = (language or "").lower().strip()
+    lang_map = {
+        "python3": "python",
+        "py": "python",
+        "js": "javascript",
+        "c++": "cpp",
+        "golang": "go",
+    }
+    language = lang_map.get(norm_lang, norm_lang)
+
     if language not in builder_map or language not in RUNNER_URLS:
-        return ("", "Invalid Language", "-1", "")
+        return ("", f"Invalid Language: {norm_lang}", "-1", "")
 
     builder = builder_map[language]
     source = builder(user_code, input_parsing, function_call)

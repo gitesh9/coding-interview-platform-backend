@@ -90,6 +90,28 @@ def _build_submission_result(raw_results: List[Dict[str, Any]], error: str = "",
     }
 
 
+def _extract_template_for_language(parsed_templates: dict, language: str) -> dict:
+    if not isinstance(parsed_templates, dict):
+        return {}
+    lang_lower = (language or "").lower().strip()
+    alias_map = {
+        "py": ["python3", "python"],
+        "python": ["python3", "python"],
+        "python3": ["python3", "python"],
+        "js": ["javascript", "js"],
+        "javascript": ["javascript", "js"],
+        "c++": ["cpp", "c++"],
+        "cpp": ["cpp", "c++"],
+        "golang": ["go", "golang"],
+    }
+    candidates = [language, lang_lower] + alias_map.get(lang_lower, [])
+    for c in candidates:
+        if c in parsed_templates and isinstance(parsed_templates[c], dict):
+            return parsed_templates[c]
+    # Fallback to python3 / python or first available dict template
+    return parsed_templates.get("python3") or parsed_templates.get("python") or {}
+
+
 @app.post("/{problemId}/evaluate")
 async def eval_code(
     problemId: str,
@@ -98,11 +120,14 @@ async def eval_code(
 ):
     problem = get_problem(problemId, submission.language)
     if not problem:
-        return {"status": "Runtime Error", "error": "Problem not found"}
+        return {"status": "Runtime Error", "error": f"Problem '{problemId}' not found"}
 
-    parsed = json.loads(problem.execution_template)
-    lang_template = parsed.get(submission.language, parsed.get('python3', {}))
+    try:
+        parsed = json.loads(problem.execution_template) if isinstance(problem.execution_template, str) else (problem.execution_template or {})
+    except Exception:
+        parsed = {}
 
+    lang_template = _extract_template_for_language(parsed, submission.language)
     input_parser = lang_template.get('input_parser', '')
     function_call = lang_template.get('function_call', '')
 
@@ -130,8 +155,14 @@ async def eval_code(
     if user_id:
         db = SessionLocal()
         try:
+            p_id = 0
+            if hasattr(problem, 'problem_id') and str(problem.problem_id).isdigit():
+                p_id = int(problem.problem_id)
+            elif str(problemId).isdigit():
+                p_id = int(problemId)
+
             db_submission = Submission(
-                problem_id=int(problemId),
+                problem_id=p_id,
                 user_id=user_id,
                 code=submission.code,
                 language=submission.language,
@@ -142,7 +173,8 @@ async def eval_code(
             )
             db.add(db_submission)
             db.commit()
-        except Exception:
+        except Exception as e:
+            print(f"Error persisting submission: {e}")
             db.rollback()
         finally:
             db.close()
@@ -154,15 +186,19 @@ async def eval_code(
 def eval_code_sample(problemId: str, submission: CodeSubmission):
     problem = get_problem(problemId, submission.language)
     if not problem:
-        return {"status": "Runtime Error", "error": "Problem not found"}
+        return {"status": "Runtime Error", "error": f"Problem '{problemId}' not found"}
 
-    parsed = json.loads(problem.execution_template)
-    test_lang_template = parsed.get('python3', {})
-    client_lang_template = parsed.get(submission.language, {})
+    try:
+        parsed = json.loads(problem.execution_template) if isinstance(problem.execution_template, str) else (problem.execution_template or {})
+    except Exception:
+        parsed = {}
+
+    test_lang_template = parsed.get('python3', parsed.get('python', {}))
+    client_lang_template = _extract_template_for_language(parsed, submission.language)
+    if not client_lang_template:
+        client_lang_template = test_lang_template
 
     # Fetch sample test input from the problem's input_schema / sample_testcases
-    # The sample input is stored alongside the problem; we pass empty and let
-    # run_sample_code handle it via the problem's schema
     sample_input = ""  # run_sample_code will use problem.input_schema
 
     output, error, runtime, results = run_sample_code(
